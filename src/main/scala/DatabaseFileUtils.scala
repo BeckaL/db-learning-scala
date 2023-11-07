@@ -8,40 +8,39 @@ import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 import scala.util.Try
 
 def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String): IO[DatabaseMetadata] =
-  val fileName = "logFile1.txt"
+  val fileName            = "logFile1.txt"
   val directoryPathString = locationPrefix + "/" + name
 
   for {
     directoryPath <- tryIO(Paths.get(directoryPathString))
     filePath      <- tryIO(Paths.get(directoryPathString + "/" + fileName))
     path          <- tryIO(Files.createDirectory(directoryPath))
-    filePath      <- tryIO(Files.createFile(filePath))
-  } yield DatabaseMetadata(directoryPath, List(LogFile(fileName, Map())))
+    _             <- tryIO(Files.createFile(filePath))
+  } yield DatabaseMetadata(directoryPath, List(LogFile(filePath, Map())))
 
 def writeToFile(stringToWrite: String, location: Path): IO[Long] =
   for {
     index <- tryIO(Files.size(location))
-    file <- tryIO(Files.writeString(location, stringToWrite, StandardOpenOption.APPEND))
+    file  <- tryIO(Files.writeString(location, stringToWrite, StandardOpenOption.APPEND))
   } yield index
 
 def readFromFile(offset: Long, location: Path): IO[(String, String)] = {
   for {
     fileChannel: FileChannel <- tryIO(FileChannel.open(location))
-    _                        = fileChannel.position(offset)
-    keySize                  <- readBinaryIntegerFromFile(fileChannel)
-    key                      <- tryIO(readChunkFromFile(keySize, fileChannel))
-    valueSize                <- readBinaryIntegerFromFile(fileChannel)
-    value                    <- tryIO(readChunkFromFile(valueSize, fileChannel))
-    _                        = fileChannel.close()
+    _ = fileChannel.position(offset)
+    keySize   <- readBinaryIntegerFromFile(fileChannel)
+    key       <- tryIO(readChunkFromFile(keySize, fileChannel))
+    valueSize <- readBinaryIntegerFromFile(fileChannel)
+    value     <- tryIO(readChunkFromFile(valueSize, fileChannel))
+    _ = fileChannel.close()
   } yield (key, value)
 }
 
 private def readBinaryIntegerFromFile(fileChannel: FileChannel): IO[Integer] =
   for {
     binaryString: String <- tryIO(readChunkFromFile(8, fileChannel))
-    integer <- tryIO(Integer.parseInt(binaryString, 2))
+    integer              <- tryIO(Integer.parseInt(binaryString, 2))
   } yield integer
-
 
 private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): String = {
   val buffer = ByteBuffer.allocate(byteBufferSize)
@@ -54,4 +53,3 @@ private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): St
 }
 
 private def tryIO[T](f: T): IO[T] = IO.fromTry(Try(f))
-

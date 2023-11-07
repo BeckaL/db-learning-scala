@@ -1,3 +1,5 @@
 package model
 
-case class LogFile(name: String, index: Map[String, Int])
+import java.nio.file.Path
+
+case class LogFile(path: Path, index: Map[String, Long])
