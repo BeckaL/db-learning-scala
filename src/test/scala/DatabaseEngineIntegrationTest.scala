@@ -1,6 +1,6 @@
 import cats.data.EitherT
 import cats.effect.unsafe.implicits.global
-import model.{DatabaseMetadata, LogFile}
+import model.{DatabaseMetadata, LogFile, ReadTooSmallValue}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -89,6 +89,18 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
       .getOrElse(throw new RuntimeException("expected result to be a left"))
       .message shouldBe
       s"Expected to find key $differentKey in logfile $existingLogFilePath at index 0 but found $myKey, the index may be corrupted"
+  }
+
+  it should "return a left with error message when the stored data is corrupted" in {
+    val notTheCorrectValue = "a"
+    Files.writeString(existingLogFilePath, keySize + myKey + valueSize + notTheCorrectValue)
+
+    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(myKey -> 0))))
+
+    val r = getFromKey(myKey, databaseMetadata).unsafeRunSync().left
+      .getOrElse(throw new RuntimeException("expected result to be a left"))
+      .message shouldBe
+      s"Expected a string of size ${myValue.size} but got string of size ${notTheCorrectValue.length}"
   }
 
   override def afterEach() = {

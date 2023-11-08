@@ -49,7 +49,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
     writeToFile(stringToWrite, existingLogFilePath).unsafeRunSync()
 
-    readFromFile(0, existingLogFilePath).unsafeRunSync() shouldBe (myKey, myValue)
+    readFromFile(0, existingLogFilePath).unsafeRunSync() shouldBe Right((myKey, myValue))
   }
 
   it should "read bytes from a file when the offset is greater than 0" in {
@@ -58,7 +58,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
     writeToFile(firstKeyValueString + otherKeyValueString, existingLogFilePath).unsafeRunSync()
 
-    readFromFile(firstKeyValueString.length, existingLogFilePath).unsafeRunSync() shouldBe (myKey, myValue)
+    readFromFile(firstKeyValueString.length, existingLogFilePath).unsafeRunSync() shouldBe Right((myKey, myValue))
   }
 
   it should "return an error if the keySize or valueSize is not an 8 padded length binary string" in {
@@ -73,6 +73,29 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
     incorrectlyFormattedThings.foreach(s => {
       writeToFile(s, existingLogFilePath).unsafeRunSync()
       assertThrows[NumberFormatException](readFromFile(0, existingLogFilePath).unsafeRunSync())
+      Files.writeString(existingLogFilePath, "")
+    })
+  }
+
+  it should "return an error if the file ends before a full value is read" in {
+    val notACorrectlySizedBinaryString = "000"
+
+    val notBigEnoughValue = "a"
+    val notBigEnoughSize  = "000"
+    val incorrectlyFormattedThings = Table(
+      ("string", "expectedSize", "stringThatsNotBigEnoughSize"),
+      (notBigEnoughSize, 8, 3),
+      (keySize + notBigEnoughValue, 5, 1),
+      (keySize + myKey + notBigEnoughSize, 8, 3),
+      (keySize + myKey + valueSize + notBigEnoughValue, 7, 1)
+    )
+
+    incorrectlyFormattedThings.foreach((s, expectedSize, stringNotBigEnoughSize) => {
+      writeToFile(s, existingLogFilePath).unsafeRunSync()
+      readFromFile(0, existingLogFilePath).unsafeRunSync()
+        .left
+        .getOrElse(throw new RuntimeException("Expected left but got right"))
+        .message shouldBe s"Expected a string of size $expectedSize but got string of size $stringNotBigEnoughSize"
       Files.writeString(existingLogFilePath, "")
     })
   }

@@ -1,5 +1,6 @@
+import cats.data.EitherT
 import cats.effect.IO
-import model.{DatabaseMetadata, LogFile}
+import model.{DatabaseException, DatabaseMetadata, LogFile, ReadTooSmallValue}
 
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -24,31 +25,34 @@ def writeToFile(stringToWrite: String, location: Path): IO[Long] =
     file  <- tryIO(Files.writeString(location, stringToWrite, StandardOpenOption.APPEND))
   } yield index
 
-def readFromFile(offset: Long, location: Path): IO[(String, String)] = {
-  for {
-    fileChannel: FileChannel <- tryIO(FileChannel.open(location))
+def readFromFile(offset: Long, location: Path): IO[Either[DatabaseException, (String, String)]] = {
+  (for {
+    fileChannel <- EitherT.right(tryIO(FileChannel.open(location)))
     _ = fileChannel.position(offset)
     keySize   <- readBinaryIntegerFromFile(fileChannel)
-    key       <- tryIO(readChunkFromFile(keySize, fileChannel))
+    key       <- EitherT.apply(tryIO(readChunkFromFile(keySize, fileChannel)))
     valueSize <- readBinaryIntegerFromFile(fileChannel)
-    value     <- tryIO(readChunkFromFile(valueSize, fileChannel))
+    value     <- EitherT.apply(tryIO(readChunkFromFile(valueSize, fileChannel)))
     _ = fileChannel.close()
-  } yield (key, value)
+  } yield (key, value)).value
 }
 
-private def readBinaryIntegerFromFile(fileChannel: FileChannel): IO[Integer] =
+private def readBinaryIntegerFromFile(fileChannel: FileChannel): EitherT[IO, DatabaseException, Integer] =
   for {
-    binaryString: String <- tryIO(readChunkFromFile(8, fileChannel))
-    integer              <- tryIO(Integer.parseInt(binaryString, 2))
+    binaryString <- EitherT.apply(tryIO(readChunkFromFile(8, fileChannel)))
+    integer <- EitherT.right(tryIO(Integer.parseInt(binaryString, 2))) // TODO can make this a left not IO now
   } yield integer
 
-private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): String =
-  // TODO this hangs when there aren't enough characters left to read in the file
+private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): Either[DatabaseException, String] =
   val buffer = ByteBuffer.allocate(byteBufferSize)
-  while (buffer.hasRemaining)
+  while (buffer.hasRemaining && fileChannel.position() < fileChannel.size())
     fileChannel.read(buffer)
   buffer.position(0)
   buffer.limit(byteBufferSize)
-  Charset.forName("UTF-8").decode(buffer).toString
+  val filterBuffer = buffer.array().filter(e => e != 0)
+  if (filterBuffer.length < byteBufferSize)
+    Left(ReadTooSmallValue(byteBufferSize, filterBuffer.length))
+  else
+    Right(Charset.forName("UTF-8").decode(buffer).toString)
 
 private def tryIO[T](f: T): IO[T] = IO.fromTry(Try(f))

@@ -15,9 +15,10 @@ def getFromKey(key: String, metadata: DatabaseMetadata): IO[Either[DatabaseExcep
   findIndexFromLogFiles(key, metadata.indices) match
     case Left(exception) => IO.pure(Left(exception))
     case Right((path, offset)) => readFromFile(offset, path).map {
-        case (retrievedKey, value) if retrievedKey == key => Right(value)
-        case (otherKey, _) =>
+        case Right((retrievedKey, value)) if retrievedKey == key => Right(value)
+        case Right((otherKey, _)) =>
           Left(FoundUnexpectedKeyAtOffset(key, path, offset, otherKey))
+        case Left(error) => Left(error)
       }
 
 private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[DatabaseException, (Path, Long)] =
