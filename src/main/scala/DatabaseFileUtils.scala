@@ -1,12 +1,12 @@
 import cats.data.EitherT
 import cats.effect.IO
-import model.{DatabaseException, DatabaseMetadata, LogFile, ReadTooSmallValue}
+import model.{DatabaseException, DatabaseMetadata, LogFile, ReadTooSmallValue, UnparseableBinaryString}
 
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, Path, Paths, StandardOpenOption}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String, logFileSizeLimit: Long): IO[DatabaseMetadata] =
   val directoryPathString = locationPrefix + "/" + name
@@ -48,7 +48,10 @@ def readFromFile(offset: Long, location: Path): IO[Either[DatabaseException, (St
 private def readBinaryIntegerFromFile(fileChannel: FileChannel): EitherT[IO, DatabaseException, Integer] =
   for {
     binaryString <- EitherT.apply(tryIO(readChunkFromFile(8, fileChannel)))
-    integer <- EitherT.right(tryIO(Integer.parseInt(binaryString, 2))) // TODO can make this a left not IO now
+    integer <- Try(Integer.parseInt(binaryString, 2)) match {
+      case Success(int) => EitherT.right[DatabaseException](IO.pure(int))
+      case Failure(_)   => EitherT.fromEither[IO](Left(UnparseableBinaryString(binaryString)))
+    }
   } yield integer
 
 private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): Either[DatabaseException, String] =

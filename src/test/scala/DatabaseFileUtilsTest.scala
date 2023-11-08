@@ -78,7 +78,6 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
   }
 
   it should "return an error if the keySize or valueSize is not an 8 padded length binary string" in {
-    // TODO make the result nicer e.g. either
     val notACorrectlySizedBinaryString = "000"
 
     val incorrectlyFormattedThings = List(
@@ -88,7 +87,9 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
     incorrectlyFormattedThings.foreach(s => {
       writeToFile(s, existingLogFilePath).unsafeRunSync()
-      assertThrows[NumberFormatException](readFromFile(0, existingLogFilePath).unsafeRunSync())
+      readFromFile(0, existingLogFilePath).unsafeRunSync().left
+        .getOrElse(throw new RuntimeException("Expected left but got right"))
+        .message should fullyMatch regex "Couldn't parse .+ as binary string".r
       Files.writeString(existingLogFilePath, "")
     })
   }

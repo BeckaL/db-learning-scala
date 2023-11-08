@@ -15,3 +15,7 @@ case class FoundUnexpectedKeyAtOffset(key: String, path: Path, offset: Long, ret
 case class ReadTooSmallValue(expectedSize: Int, actualSize: Int) extends DatabaseException {
   val message = s"Expected a string of size $expectedSize but got string of size $actualSize"
 }
+
+case class UnparseableBinaryString(s: String) extends DatabaseException {
+  val message = s"Couldn't parse $s as binary string"
+}
