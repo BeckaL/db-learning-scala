@@ -42,7 +42,7 @@ private def readBinaryIntegerFromFile(fileChannel: FileChannel): IO[Integer] =
     integer              <- tryIO(Integer.parseInt(binaryString, 2))
   } yield integer
 
-private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): String = {
+private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): String = 
   val buffer = ByteBuffer.allocate(byteBufferSize)
   while (buffer.hasRemaining) {
     fileChannel.read(buffer)
@@ -50,6 +50,5 @@ private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): St
   buffer.position(0)
   buffer.limit(byteBufferSize)
   Charset.forName("UTF-8").decode(buffer).toString
-}
 
 private def tryIO[T](f: T): IO[T] = IO.fromTry(Try(f))
