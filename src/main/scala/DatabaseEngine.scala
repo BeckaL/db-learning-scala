@@ -14,8 +14,11 @@ def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Eith
 def getFromKey(key: String, metadata: DatabaseMetadata): IO[Either[String, String]] =
   findIndexFromLogFiles(key, metadata.indices) match
     case Left(error) => IO.pure(Left(error))
-    // TODO error handling if key does not match
-    case Right((path, offset)) => readFromFile(offset, path).map(r => Right(r._2))
+    case Right((path, offset)) => readFromFile(offset, path).map {
+        case (retrievedKey, value) if retrievedKey == key => Right(value)
+        case (otherKey, _) =>
+          Left(s"Expected to find key $key in logfile $path at index $offset but found $otherKey, the index may be corrupted")
+      }
 
 private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[String, (Path, Long)] =
   logFiles match

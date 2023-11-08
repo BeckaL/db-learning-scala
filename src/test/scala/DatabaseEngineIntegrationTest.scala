@@ -16,12 +16,13 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   private val keySize              = "00000101"
   private val myValue              = "myValue"
   private val valueSize            = "00000111"
+  private val keyValueString = keySize + myKey + valueSize + myValue
 
   "write" should "update the index when it is empty" in {
     val databaseEngine = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())))
     storeKeyValue(myKey, myValue, databaseEngine).unsafeRunSync() shouldBe
       Right(databaseEngine.withUpdatedLogFileIndex(Map(myKey -> 0)))
-    Files.readString(existingLogFilePath) shouldBe keySize + myKey + valueSize + myValue
+    Files.readString(existingLogFilePath) shouldBe keyValueString
   }
 
   it should "update the index when it is not empty" in {
@@ -31,7 +32,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, indexMap)))
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync() shouldBe
       Right(databaseMetadata.withUpdatedLogFileIndex(indexMap.updated(myKey, existingData.length)))
-    Files.readString(existingLogFilePath) shouldBe existingData + keySize + myKey + valueSize + myValue
+    Files.readString(existingLogFilePath) shouldBe existingData + keyValueString
   }
 
   "getFromKey" should "store a key value and retrieve it" in {
@@ -50,7 +51,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   }
 
   it should "retrieve a key when it is not found in the latest index" in {
-    Files.writeString(secondExistingLogFilePath, keySize + myKey + valueSize + myValue)
+    Files.writeString(secondExistingLogFilePath, keyValueString)
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(
       LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
       LogFile(secondExistingLogFilePath, Map(myKey -> 0)))
@@ -60,13 +61,22 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   }
 
   it should "return a left with error message if the key is not in any index" in {
-    Files.writeString(secondExistingLogFilePath, keySize + myKey + valueSize + myValue)
+    Files.writeString(secondExistingLogFilePath, keyValueString)
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(
       LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
       LogFile(secondExistingLogFilePath, Map("andAnotherKey" -> 0)))
     )
 
     getFromKey(myKey, databaseMetadata).unsafeRunSync() shouldBe Left(s"Could not find value for key $myKey")
+  }
+
+  it should "return a left with error message when the index is incorrect" in {
+    Files.writeString(existingLogFilePath, keyValueString)
+    val differentKey = "anotherKey"
+    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(differentKey -> 0))))
+
+    getFromKey(differentKey, databaseMetadata).unsafeRunSync() shouldBe Left(
+      s"Expected to find key $differentKey in logfile $existingLogFilePath at index 0 but found $myKey, the index may be corrupted")
   }
 
   override def afterEach() = {
