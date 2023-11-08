@@ -36,6 +36,15 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     Files.readString(existingLogFilePath) shouldBe existingData + keyValueString
   }
 
+  it should "overwrite an existing entry when writing the same key to the same log file" in {
+    Files.writeString(existingLogFilePath, keyValueString)
+    val indexMap         = Map(myKey -> 0.toLong)
+    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, indexMap)), 1000L)
+
+    storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync() shouldBe
+      Right(databaseMetadata.withUpdatedLogFileIndex(Map(myKey -> keyValueString.length)))
+  }
+
   it should "write to a new file when the existing log file is at capacity" in {
     val fileLimit    = 1000
     val existingData = "a" * 999
@@ -77,6 +86,22 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     )
 
     getFromKey(myKey, databaseMetadata).unsafeRunSync() shouldBe Right(myValue)
+  }
+
+  it should "retrieve the latest key when is found in multiple indices" in {
+    Files.writeString(existingLogFilePath, keyValueString)
+    val otherValue = myValue.reverse
+    Files.writeString(secondExistingLogFilePath, keySize + myKey + valueSize + otherValue)
+    val databaseMetadata = DatabaseMetadata(
+      existingDatabasePath,
+      List(
+        LogFile(secondExistingLogFilePath, Map(myKey -> 0)),
+        LogFile(existingLogFilePath, Map(myKey -> 0))
+      ),
+      1000L
+    )
+
+    getFromKey(myKey, databaseMetadata).unsafeRunSync() shouldBe Right(otherValue)
   }
 
   it should "return a left with error message if the key is not in any index" in {
