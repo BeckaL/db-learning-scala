@@ -8,10 +8,10 @@ import org.scalatest.matchers.should.Matchers
 import java.nio.file.{Files, Paths}
 
 class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
-  private val logFileName               = "logFile2.txt"
-  private val existingDatabasePath      = Paths.get("./src/test/resources/existingDatabase")
-  private val existingLogFilePath       = Paths.get(s"./src/test/resources/existingDatabase/$logFileName")
-  private val secondExistingLogFilePath = Paths.get(s"./src/test/resources/existingDatabase/logFile3.txt")
+  private val logFileName               = "logFile1.txt"
+  private val existingDatabasePath      = Paths.get("./src/test/resources/DatabaseEngineIntegrationTestDatabase")
+  private val existingLogFilePath       = Paths.get(s"./src/test/resources/DatabaseEngineIntegrationTestDatabase/$logFileName")
+  private val secondExistingLogFilePath = Paths.get(s"./src/test/resources/DatabaseEngineIntegrationTestDatabase/logFile2.txt")
   private val myKey                     = "myKey"
   private val keySize                   = "00000101"
   private val myValue                   = "myValue"

@@ -9,15 +9,21 @@ import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 import scala.util.Try
 
 def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String): IO[DatabaseMetadata] =
-  val fileName            = "logFile1.txt"
   val directoryPathString = locationPrefix + "/" + name
 
   for {
     directoryPath <- tryIO(Paths.get(directoryPathString))
-    filePath      <- tryIO(Paths.get(directoryPathString + "/" + fileName))
-    path          <- tryIO(Files.createDirectory(directoryPath))
-    _             <- tryIO(Files.createFile(filePath))
-  } yield DatabaseMetadata(directoryPath, List(LogFile(filePath, Map())))
+    initialMetadata = DatabaseMetadata(directoryPath, List())
+    _ <- tryIO(Files.createDirectory(directoryPath))
+    updatedMetadata <- createNewLogFile(initialMetadata)
+  } yield updatedMetadata
+
+def createNewLogFile(databaseMetadata: DatabaseMetadata): IO[DatabaseMetadata] =
+  val name = s"logFile${databaseMetadata.indices.length + 1}.txt"
+  for {
+    filePath <- tryIO(Paths.get(databaseMetadata.path.toString + "/" + name))
+    _        <- tryIO(Files.createFile(filePath))
+  } yield databaseMetadata.copy(indices = LogFile(filePath, Map()) +: databaseMetadata.indices)
 
 def writeToFile(stringToWrite: String, location: Path): IO[Long] =
   for {

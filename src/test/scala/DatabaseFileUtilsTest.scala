@@ -11,20 +11,33 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
   private val prefix               = "./src/test/resources"
   private val logFile              = "logFile1.txt"
   private val databaseName         = "myDatabase"
-  private val existingDatabasePath = Paths.get(s"$prefix/existingDatabase")
+  private val existingDatabasePath = Paths.get(s"$prefix/DatabaseFileUtilsTestDatabase")
   private val databasePath         = Paths.get(s"$prefix/$databaseName")
   private val logFilePath          = Paths.get(s"$prefix/$databaseName/$logFile")
-  private val existingLogFilePath  = Paths.get(s"$prefix/existingDatabase/$logFile")
+  private val existingLogFilePath  = Paths.get(s"$prefix/DatabaseFileUtilsTestDatabase/$logFile")
   private val myKey                = "myKey"
   private val keySize              = "00000101"
   private val myValue              = "myValue"
   private val valueSize            = "00000111"
+  private val newLogFilePath       = Paths.get(databasePath.toString + "/logFile2.txt")
 
   "create database engine" should "create a new folder and log file" in {
     val expectedDatabase = DatabaseMetadata(databasePath, List(LogFile(logFilePath, Map())))
     createDatabaseEngine(prefix, "myDatabase").unsafeRunSync() shouldBe expectedDatabase
     Files.isDirectory(databasePath) shouldBe true
     Files.isRegularFile(logFilePath) shouldBe true
+  }
+
+  "create new logfile" should "create a new log file prepended to the existing indices" in {
+    val initialLogFile   = LogFile(logFilePath, Map())
+    val expectedDatabase = DatabaseMetadata(databasePath, List(initialLogFile))
+    val metadata         = createDatabaseEngine(prefix, "myDatabase").unsafeRunSync()
+
+    val updatedMetadata = createNewLogFile(metadata).unsafeRunSync()
+
+    val expectedNewLogFile = LogFile(newLogFilePath, Map())
+    updatedMetadata.indices shouldBe List(expectedNewLogFile, initialLogFile)
+    Files.isRegularFile(newLogFilePath) shouldBe true
   }
 
   "writeToFile" should "write to file and return the index it wrote to" in {
@@ -102,6 +115,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
   override def afterEach(): Unit = {
     Files.deleteIfExists(logFilePath)
+    Files.deleteIfExists(newLogFilePath)
     Files.deleteIfExists(databasePath)
     Files.writeString(existingLogFilePath, "")
   }
