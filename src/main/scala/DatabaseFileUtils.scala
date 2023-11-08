@@ -43,7 +43,7 @@ private def readBinaryIntegerFromFile(fileChannel: FileChannel): IO[Integer] =
   } yield integer
 
 private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): String =
-  //TODO this hangs when there aren't enough characters left to read in the file
+  // TODO this hangs when there aren't enough characters left to read in the file
   val buffer = ByteBuffer.allocate(byteBufferSize)
   while (buffer.hasRemaining)
     fileChannel.read(buffer)

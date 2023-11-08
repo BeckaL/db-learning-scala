@@ -1,7 +1,7 @@
 import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
-import model.{DatabaseMetadata, LogFile}
+import model.{DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile}
 
 import java.nio.file.Path
 
@@ -11,18 +11,18 @@ def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Eith
     i      <- EitherT.right(writeToFile(string, engine.indices.head.path))
   } yield engine.withUpdatedLogFileIndex(engine.indices.head.index.updated(key, i))).value
 
-def getFromKey(key: String, metadata: DatabaseMetadata): IO[Either[String, String]] =
+def getFromKey(key: String, metadata: DatabaseMetadata): IO[Either[DatabaseException, String]] =
   findIndexFromLogFiles(key, metadata.indices) match
-    case Left(error) => IO.pure(Left(error))
+    case Left(exception) => IO.pure(Left(exception))
     case Right((path, offset)) => readFromFile(offset, path).map {
         case (retrievedKey, value) if retrievedKey == key => Right(value)
         case (otherKey, _) =>
-          Left(s"Expected to find key $key in logfile $path at index $offset but found $otherKey, the index may be corrupted")
+          Left(FoundUnexpectedKeyAtOffset(key, path, offset, otherKey))
       }
 
-private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[String, (Path, Long)] =
+private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[DatabaseException, (Path, Long)] =
   logFiles match
-    case Nil => Left(s"Could not find value for key $key")
+    case Nil => Left(KeyNotFoundInIndices(key))
     case firstLogFile :: others => firstLogFile.index.get(key) match
         case Some(i) => Right((firstLogFile.path, i))
         case None    => findIndexFromLogFiles(key, others)

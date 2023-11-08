@@ -8,15 +8,15 @@ import org.scalatest.matchers.should.Matchers
 import java.nio.file.{Files, Paths}
 
 class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
-  private val logFileName          = "logFile2.txt"
-  private val existingDatabasePath = Paths.get("./src/test/resources/existingDatabase")
-  private val existingLogFilePath  = Paths.get(s"./src/test/resources/existingDatabase/$logFileName")
-  private val secondExistingLogFilePath  = Paths.get(s"./src/test/resources/existingDatabase/logFile3.txt")
-  private val myKey                = "myKey"
-  private val keySize              = "00000101"
-  private val myValue              = "myValue"
-  private val valueSize            = "00000111"
-  private val keyValueString = keySize + myKey + valueSize + myValue
+  private val logFileName               = "logFile2.txt"
+  private val existingDatabasePath      = Paths.get("./src/test/resources/existingDatabase")
+  private val existingLogFilePath       = Paths.get(s"./src/test/resources/existingDatabase/$logFileName")
+  private val secondExistingLogFilePath = Paths.get(s"./src/test/resources/existingDatabase/logFile3.txt")
+  private val myKey                     = "myKey"
+  private val keySize                   = "00000101"
+  private val myValue                   = "myValue"
+  private val valueSize                 = "00000111"
+  private val keyValueString            = keySize + myKey + valueSize + myValue
 
   "write" should "update the index when it is empty" in {
     val databaseEngine = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())))
@@ -52,9 +52,12 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   it should "retrieve a key when it is not found in the latest index" in {
     Files.writeString(secondExistingLogFilePath, keyValueString)
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(
-      LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
-      LogFile(secondExistingLogFilePath, Map(myKey -> 0)))
+    val databaseMetadata = DatabaseMetadata(
+      existingDatabasePath,
+      List(
+        LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
+        LogFile(secondExistingLogFilePath, Map(myKey -> 0))
+      )
     )
 
     getFromKey(myKey, databaseMetadata).unsafeRunSync() shouldBe Right(myValue)
@@ -62,21 +65,30 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   it should "return a left with error message if the key is not in any index" in {
     Files.writeString(secondExistingLogFilePath, keyValueString)
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(
-      LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
-      LogFile(secondExistingLogFilePath, Map("andAnotherKey" -> 0)))
+    val databaseMetadata = DatabaseMetadata(
+      existingDatabasePath,
+      List(
+        LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
+        LogFile(secondExistingLogFilePath, Map("andAnotherKey" -> 0))
+      )
     )
 
-    getFromKey(myKey, databaseMetadata).unsafeRunSync() shouldBe Left(s"Could not find value for key $myKey")
+    getFromKey(myKey, databaseMetadata)
+      .unsafeRunSync()
+      .left
+      .getOrElse(throw new RuntimeException("expected result to be a left")).message shouldBe
+      s"Could not find key $myKey in indices"
   }
 
   it should "return a left with error message when the index is incorrect" in {
     Files.writeString(existingLogFilePath, keyValueString)
-    val differentKey = "anotherKey"
+    val differentKey     = "anotherKey"
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(differentKey -> 0))))
 
-    getFromKey(differentKey, databaseMetadata).unsafeRunSync() shouldBe Left(
-      s"Expected to find key $differentKey in logfile $existingLogFilePath at index 0 but found $myKey, the index may be corrupted")
+    getFromKey(differentKey, databaseMetadata).unsafeRunSync().left
+      .getOrElse(throw new RuntimeException("expected result to be a left"))
+      .message shouldBe
+      s"Expected to find key $differentKey in logfile $existingLogFilePath at index 0 but found $myKey, the index may be corrupted"
   }
 
   override def afterEach() = {
