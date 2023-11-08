@@ -7,12 +7,18 @@ import java.nio.file.Path
 def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Either[String, DatabaseMetadata]] =
   (for {
     string <- EitherT.fromEither[IO](getStringToWrite(key, value))
-    i <- EitherT.right(writeToFile(string, engine.indices.head.path))
+    i      <- EitherT.right(writeToFile(string, engine.indices.head.path))
   } yield engine.withUpdatedLogFileIndex(engine.indices.head.index.updated(key, i))).value
 
+def getFromKey(key: String, metadata: DatabaseMetadata): IO[String] = {
+  val logFile = metadata.indices.head
+  val offset  = metadata.indices.head.index(key)
+  // TODO error handling if key does not match
+  readFromFile(offset, logFile.path).map(result => result._2)
+}
 private def getStringToWrite(key: String, value: String): Either[String, String] =
   for {
-    keySize <- toPaddedBinaryString(key.size)
+    keySize   <- toPaddedBinaryString(key.size)
     valueSize <- toPaddedBinaryString(value.size)
   } yield keySize + key + valueSize + value
 
@@ -24,8 +30,4 @@ private def toPaddedBinaryString(i: Int): Either[String, String] =
     Right("0" * (8 - binString.length) + binString)
   }
 
-implicit class DatabaseMetadataOps(md: DatabaseMetadata) {
-  def withUpdatedLogFileIndex(indexMap: Map[String, Long]): DatabaseMetadata = {
-    md.copy(indices = md.indices.updated(0, md.indices.head.copy(index = indexMap)))
-  }
-}
+

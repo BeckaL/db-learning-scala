@@ -1,8 +1,9 @@
-import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers
+import cats.data.EitherT
 import cats.effect.unsafe.implicits.global
 import model.{DatabaseMetadata, LogFile}
 import org.scalatest.BeforeAndAfterEach
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import java.nio.file.{Files, Paths}
 
@@ -30,6 +31,21 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync() shouldBe
       Right(databaseMetadata.withUpdatedLogFileIndex(indexMap.updated(myKey, existingData.length)))
     Files.readString(existingLogFilePath) shouldBe existingData + keySize + myKey + valueSize + myValue
+  }
+
+  it should "store a key value and retrieve it" in {
+    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())))
+    val secondKey        = "anotherKey"
+    val secondValue      = "anotherValue"
+    val result = (for {
+      updatedMetadata1     <- EitherT.apply(storeKeyValue(myKey, myValue, databaseMetadata))
+      updatedMetadata2     <- EitherT.apply(storeKeyValue(secondKey, secondValue, updatedMetadata1))
+      firstRetrievedValue  <- EitherT.right(getFromKey(myKey, updatedMetadata2))
+      secondRetrievedValue <- EitherT.right(getFromKey(secondKey, updatedMetadata2))
+    } yield (firstRetrievedValue, secondRetrievedValue)).value.unsafeRunSync()
+    val (firstRetrievedValue, secondRetrievedValue) = result.getOrElse(throw new RuntimeException("Didn't get a right"))
+
+    result shouldBe Right((myValue, secondValue))
   }
 
   override def afterEach() = Files.writeString(existingLogFilePath, "")
