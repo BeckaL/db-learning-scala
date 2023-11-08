@@ -28,8 +28,8 @@ private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[
         case None    => findIndexFromLogFiles(key, others)
 private def getStringToWrite(key: String, value: String): Either[String, String] =
   for {
-    keySize   <- toPaddedBinaryString(key.size)
-    valueSize <- toPaddedBinaryString(value.size)
+    keySize   <- toPaddedBinaryString(key.length)
+    valueSize <- toPaddedBinaryString(value.length)
   } yield keySize + key + valueSize + value
 
 private def toPaddedBinaryString(i: Int): Either[String, String] =
