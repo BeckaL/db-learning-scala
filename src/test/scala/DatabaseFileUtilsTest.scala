@@ -23,7 +23,9 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
   "create database engine" should "create a new folder and log file" in {
     val expectedDatabase = DatabaseMetadata(databasePath, List(LogFile(logFilePath, Map())), 1000L)
+
     createDatabaseEngine(prefix, "myDatabase", 1000L).unsafeRunSync() shouldBe expectedDatabase
+
     Files.isDirectory(databasePath) shouldBe true
     Files.isRegularFile(logFilePath) shouldBe true
   }
@@ -42,6 +44,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
   "writeToFile" should "write to file and return the index it wrote to" in {
     val stringToWrite = "someStringWithIndices"
+
     writeToFile(stringToWrite, existingLogFilePath).unsafeRunSync() shouldBe 0
     Files.readString(existingLogFilePath) shouldBe stringToWrite
   }

@@ -21,6 +21,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   "write" should "update the index when it is empty" in {
     val databaseEngine = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())), 1000L)
+
     storeKeyValue(myKey, myValue, databaseEngine).unsafeRunSync() shouldBe
       Right(databaseEngine.withUpdatedLogFileIndex(Map(myKey -> 0)))
     Files.readString(existingLogFilePath) shouldBe keyValueString
@@ -31,8 +32,10 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     Files.writeString(existingLogFilePath, existingData)
     val indexMap         = Map("otherKey" -> 0.toLong)
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, indexMap)), 1000L)
+
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync() shouldBe
       Right(databaseMetadata.withUpdatedLogFileIndex(indexMap.updated(myKey, existingData.length)))
+
     Files.readString(existingLogFilePath) shouldBe existingData + keyValueString
   }
 
@@ -49,13 +52,13 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     val fileLimit    = 1000
     val existingData = "a" * 999
     Files.writeString(secondExistingLogFilePath, existingData)
-    val existingLogFiles = List(LogFile(secondExistingLogFilePath, Map()), LogFile(existingLogFilePath, Map()))
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, existingLogFiles, fileLimit.toLong)
-    val is = storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync()
-      .getOrElse(throw new RuntimeException("expected right but got left"))
-      .indices
+    val existingLogFiles   = List(LogFile(secondExistingLogFilePath, Map()), LogFile(existingLogFilePath, Map()))
+    val databaseMetadata   = DatabaseMetadata(existingDatabasePath, existingLogFiles, fileLimit.toLong)
     val expectedNewLogFile = LogFile(thirdLogFilePath, Map(myKey -> 0))
-    is shouldBe expectedNewLogFile +: existingLogFiles
+
+    storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync()
+      .getOrElse(throw new RuntimeException("expected right but got left"))
+      .indices shouldBe expectedNewLogFile +: existingLogFiles
     Files.exists(thirdLogFilePath) shouldBe true
   }
 
@@ -136,10 +139,9 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   it should "return a left with error message when the stored data is corrupted" in {
     val notTheCorrectValue = "a"
     Files.writeString(existingLogFilePath, keySize + myKey + valueSize + notTheCorrectValue)
-
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(myKey -> 0))), 1000L)
 
-    val r = getFromKey(myKey, databaseMetadata).unsafeRunSync().left
+    getFromKey(myKey, databaseMetadata).unsafeRunSync().left
       .getOrElse(throw new RuntimeException("expected result to be a left"))
       .message shouldBe
       s"Expected a string of size ${myValue.size} but got string of size ${notTheCorrectValue.length}"
