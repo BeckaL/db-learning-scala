@@ -7,9 +7,12 @@ import java.nio.file.Path
 
 def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Either[String, DatabaseMetadata]] =
   (for {
-    string <- EitherT.fromEither[IO](getStringToWrite(key, value))
-    i      <- EitherT.right(writeToFile(string, engine.indices.head.path))
-  } yield engine.withUpdatedLogFileIndex(engine.indices.head.index.updated(key, i))).value
+    string       <- EitherT.fromEither[IO](getStringToWrite(key, value))
+    existingSize <- EitherT.right(getExistingFileSize(engine.indices.head.path))
+    hasCapacity = (string.length + existingSize) <= engine.fileLimit
+    updatedEngine <- if (hasCapacity) EitherT.right(IO.pure(engine)) else EitherT.right(createNewLogFile(engine))
+    i             <- EitherT.right(writeToFile(string, updatedEngine.indices.head.path))
+  } yield updatedEngine.withUpdatedLogFileIndex(updatedEngine.indices.head.index.updated(key, i))).value
 
 def getFromKey(key: String, metadata: DatabaseMetadata): IO[Either[DatabaseException, String]] =
   findIndexFromLogFiles(key, metadata.indices) match

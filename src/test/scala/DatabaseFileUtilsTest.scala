@@ -22,16 +22,16 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
   private val newLogFilePath       = Paths.get(databasePath.toString + "/logFile2.txt")
 
   "create database engine" should "create a new folder and log file" in {
-    val expectedDatabase = DatabaseMetadata(databasePath, List(LogFile(logFilePath, Map())))
-    createDatabaseEngine(prefix, "myDatabase").unsafeRunSync() shouldBe expectedDatabase
+    val expectedDatabase = DatabaseMetadata(databasePath, List(LogFile(logFilePath, Map())), 1000L)
+    createDatabaseEngine(prefix, "myDatabase", 1000L).unsafeRunSync() shouldBe expectedDatabase
     Files.isDirectory(databasePath) shouldBe true
     Files.isRegularFile(logFilePath) shouldBe true
   }
 
   "create new logfile" should "create a new log file prepended to the existing indices" in {
     val initialLogFile   = LogFile(logFilePath, Map())
-    val expectedDatabase = DatabaseMetadata(databasePath, List(initialLogFile))
-    val metadata         = createDatabaseEngine(prefix, "myDatabase").unsafeRunSync()
+    val expectedDatabase = DatabaseMetadata(databasePath, List(initialLogFile), 1000L)
+    val metadata         = createDatabaseEngine(prefix, "myDatabase", 1000L).unsafeRunSync()
 
     val updatedMetadata = createNewLogFile(metadata).unsafeRunSync()
 

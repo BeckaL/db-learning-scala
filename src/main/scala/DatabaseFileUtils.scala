@@ -8,13 +8,13 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 import scala.util.Try
 
-def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String): IO[DatabaseMetadata] =
+def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String, logFileSizeLimit: Long): IO[DatabaseMetadata] =
   val directoryPathString = locationPrefix + "/" + name
 
   for {
     directoryPath <- tryIO(Paths.get(directoryPathString))
-    initialMetadata = DatabaseMetadata(directoryPath, List())
-    _ <- tryIO(Files.createDirectory(directoryPath))
+    initialMetadata = DatabaseMetadata(directoryPath, List(), logFileSizeLimit)
+    _               <- tryIO(Files.createDirectory(directoryPath))
     updatedMetadata <- createNewLogFile(initialMetadata)
   } yield updatedMetadata
 
@@ -27,9 +27,11 @@ def createNewLogFile(databaseMetadata: DatabaseMetadata): IO[DatabaseMetadata] =
 
 def writeToFile(stringToWrite: String, location: Path): IO[Long] =
   for {
-    index <- tryIO(Files.size(location))
+    index <- getExistingFileSize(location)
     file  <- tryIO(Files.writeString(location, stringToWrite, StandardOpenOption.APPEND))
   } yield index
+
+def getExistingFileSize(location: Path): IO[Long] = tryIO(Files.size(location))
 
 def readFromFile(offset: Long, location: Path): IO[Either[DatabaseException, (String, String)]] = {
   (for {
