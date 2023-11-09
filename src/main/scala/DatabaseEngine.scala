@@ -1,7 +1,7 @@
 import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
-import model.{BinaryStringLengthExceeded, DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile}
+import model.{BinaryStringLengthExceeded, DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile, NotEnoughLogFilesToCompress}
 
 import java.nio.file.{Path, Paths}
 import java.util.UUID
@@ -36,20 +36,24 @@ def compress(
   dbMetadata: DatabaseMetadata,
   fileNameUpdater: DatabaseMetadata => Path = newLogName
 ): IO[Either[DatabaseException, DatabaseMetadata]] = {
-  val olderFile = dbMetadata.indices.last
-  val newerFile = dbMetadata.indices.dropRight(1).last
+  if (dbMetadata.indices.size < 3) {
+    IO.pure(Left(NotEnoughLogFilesToCompress(dbMetadata.indices.length)))
+  } else {
+    val olderFile = dbMetadata.indices.last
+    val newerFile = dbMetadata.indices.dropRight(1).last
 
-  // Here we merge two maps with ++. The second map takes precedence in the case of duplicate keys i.e. newer takes precedence
-  val keysToFilePaths = olderFile.index.view.mapValues((_, olderFile.path)).toMap ++
-    newerFile.index.view.mapValues((_, newerFile.path))
+    // Here we merge two maps with ++. The second map takes precedence in the case of duplicate keys i.e. newer takes precedence
+    val keysToFilePaths = olderFile.index.view.mapValues((_, olderFile.path)).toMap ++
+      newerFile.index.view.mapValues((_, newerFile.path))
 
-  (for {
-    newFile      <- EitherT.right(createNewFile(fileNameUpdater(dbMetadata)))
-    updatedIndex <- EitherT.right(writeMapToNewIndex(newFile, keysToFilePaths, newFile))
-  } yield dbMetadata.copy(indices = List(LogFile(newFile, updatedIndex))))
-    .value
-    .flatTap(_ => deleteFile(olderFile.path))
-    .flatTap(_ => deleteFile(newerFile.path))
+    (for {
+      newFile      <- EitherT.right(createNewFile(fileNameUpdater(dbMetadata)))
+      updatedIndex <- EitherT.right(writeMapToNewIndex(newFile, keysToFilePaths, newFile))
+    } yield dbMetadata.copy(indices = List(LogFile(newFile, updatedIndex))))
+      .value
+      .flatTap(_ => deleteFile(olderFile.path))
+      .flatTap(_ => deleteFile(newerFile.path))
+  }
 }
 
 private def writeMapToNewIndex(path: Path, keysToFilePaths: Map[String, (Long, Path)], newLogFileName: Path): IO[Map[String, Long]] =

@@ -157,14 +157,16 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     writeToFile(firstKeyString + secondKeyString + thirdKeyString, existingLogFilePath).unsafeRunSync()
     writeToFile(firstKeyStringUpdated + fourthKeyString, secondExistingLogFilePath).unsafeRunSync()
 
-    val i: Int        = firstKeyString.length + secondKeyString.length
-    val olderIndexMap = Map("firstKey" -> 0L, "secondKey" -> firstKeyString.length.toLong, "thirdKey" -> i.toLong)
-    val newerIndexMap = Map("firstKey" -> 0L, "fourthKey" -> firstKeyStringUpdated.length.toLong)
-    val databaseMetadata = DatabaseMetadata(
-      existingDatabasePath,
-      List(LogFile(secondExistingLogFilePath, newerIndexMap), LogFile(existingLogFilePath, olderIndexMap)),
-      1000L
+    val olderLogFile = LogFile(
+      existingLogFilePath,
+      Map(
+        "firstKey"  -> 0,
+        "secondKey" -> firstKeyString.length,
+        "thirdKey"  -> (firstKeyString.length + secondKeyString.length)
+      )
     )
+    val newerLogFile     = LogFile(secondExistingLogFilePath, Map("firstKey" -> 0, "fourthKey" -> firstKeyStringUpdated.length))
+    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile.empty(thirdLogFilePath), newerLogFile, olderLogFile), 1000L)
 
     val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync().getRight
 
@@ -172,8 +174,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     updatedMetadata.indices.head.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
     updatedMetadata.indices.head.path shouldBe newLogFilePath
 
-    Files.exists(existingLogFilePath) shouldBe false
-    Files.exists(secondExistingLogFilePath) shouldBe false
+    List(existingLogFilePath, secondExistingLogFilePath).foreach(Files.exists(_) shouldBe false)
 
     val expectedValues = Table(
       ("key", "value"),
@@ -183,9 +184,16 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
       ("fourthKey", "fourthValue")
     )
 
-    expectedValues.forEvery((key, value) =>
-      getFromKey(key, updatedMetadata).unsafeRunSync().getRight shouldBe value
-    )
+    expectedValues.forEvery((k, v) => getFromKey(k, updatedMetadata).unsafeRunSync().getRight shouldBe v)
+  }
+
+  it should "return an error if there are less than three log files" in {
+    val databaseMetadata =
+      DatabaseMetadata(existingDatabasePath, List(LogFile.empty(existingLogFilePath), LogFile.empty(secondExistingLogFilePath)), 1000L)
+
+    compress(databaseMetadata).unsafeRunSync().getLeft.message shouldBe
+      s"There were not enough log files to compress: need at least two dormant log files " +
+      s"and one live file to compress, but there were only 2 files in total"
   }
 
   override def beforeEach(): Unit = {

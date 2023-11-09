@@ -23,3 +23,9 @@ case class UnparseableBinaryString(s: String) extends DatabaseException {
 case class BinaryStringLengthExceeded(i: Int) extends DatabaseException {
   val message = s"Tried to store string of length $i, this was more than the allowed size"
 }
+
+case class NotEnoughLogFilesToCompress(n: Int) extends DatabaseException {
+  val message =
+    s"There were not enough log files to compress: need at least two dormant log files " +
+      s"and one live file to compress, but there were only $n files in total"
+}
