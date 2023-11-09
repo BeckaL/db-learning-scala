@@ -21,7 +21,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   private val keyValueString            = keySize + myKey + valueSize + myValue
   private val newLogFilePath            = Paths.get(s"./src/test/resources/DatabaseEngineIntegrationTestDatabase/afterCompressLogFile.txt")
 
-  "write" should "update the index when it is empty" in {
+  "write" should "update the log file when it is empty" in {
     val databaseEngine = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())), 1000L)
 
     storeKeyValue(myKey, myValue, databaseEngine).unsafeRunSync() shouldBe
@@ -29,7 +29,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     Files.readString(existingLogFilePath) shouldBe keyValueString
   }
 
-  it should "update the index when it is not empty" in {
+  it should "update the log file when it is not empty" in {
     val existingData = "someKeyAndValue"
     Files.writeString(existingLogFilePath, existingData)
     val indexMap         = Map("otherKey" -> 0.toLong)
@@ -60,7 +60,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync()
       .getRight
-      .indices shouldBe expectedNewLogFile +: existingLogFiles
+      .logFiles shouldBe expectedNewLogFile +: existingLogFiles
     Files.exists(thirdLogFilePath) shouldBe true
   }
 
@@ -170,9 +170,9 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
     val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync().getRight
 
-    updatedMetadata.indices.size shouldBe 1
-    updatedMetadata.indices.head.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
-    updatedMetadata.indices.head.path shouldBe newLogFilePath
+    updatedMetadata.logFiles.size shouldBe 1
+    updatedMetadata.logFiles.head.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
+    updatedMetadata.logFiles.head.path shouldBe newLogFilePath
 
     List(existingLogFilePath, secondExistingLogFilePath).foreach(Files.exists(_) shouldBe false)
 
@@ -201,8 +201,8 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
     writeToFile(malformedKey, existingLogFilePath).unsafeRunSync()
     val indexWithMalformedKey = LogFile(existingLogFilePath, Map(myKey -> 0))
-    val indices               = List(LogFile.empty(thirdLogFilePath), LogFile.empty(secondExistingLogFilePath), indexWithMalformedKey)
-    val databaseMetadata      = DatabaseMetadata(existingDatabasePath, indices, 1000L)
+    val logFiles              = List(LogFile.empty(thirdLogFilePath), LogFile.empty(secondExistingLogFilePath), indexWithMalformedKey)
+    val databaseMetadata      = DatabaseMetadata(existingDatabasePath, logFiles, 1000L)
 
     compress(databaseMetadata).unsafeRunSync().getLeft.message shouldBe "Expected a string of size 7 but got string of size 1"
   }

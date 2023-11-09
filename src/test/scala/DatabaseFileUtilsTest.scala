@@ -30,7 +30,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
     Files.isRegularFile(logFilePath) shouldBe true
   }
 
-  "create new logfile" should "create a new log file prepended to the existing indices" in {
+  "create new logfile" should "create a new log file prepended to the existing log files" in {
     val initialLogFile   = LogFile(logFilePath, Map())
     val expectedDatabase = DatabaseMetadata(databasePath, List(initialLogFile), 1000L)
     val metadata         = createDatabaseEngine(prefix, "myDatabase", 1000L).unsafeRunSync()
@@ -38,18 +38,18 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
     val updatedMetadata = createNewLogFile(metadata).unsafeRunSync()
 
     val expectedNewLogFile = LogFile(newLogFilePath, Map())
-    updatedMetadata.indices shouldBe List(expectedNewLogFile, initialLogFile)
+    updatedMetadata.logFiles shouldBe List(expectedNewLogFile, initialLogFile)
     Files.isRegularFile(newLogFilePath) shouldBe true
   }
 
-  "writeToFile" should "write to file and return the index it wrote to" in {
+  "writeToFile" should "write to file and return the log file it wrote to" in {
     val stringToWrite = "someStringWithIndices"
 
     writeToFile(stringToWrite, existingLogFilePath).unsafeRunSync() shouldBe 0
     Files.readString(existingLogFilePath) shouldBe stringToWrite
   }
 
-  it should "write to a file with existing content in and return the index it wrote to" in {
+  it should "write to a file with existing content in and return the log file it wrote to" in {
     val stringToWrite = "someStringWithIndices"
 
     val i1 = writeToFile(stringToWrite, existingLogFilePath).unsafeRunSync()

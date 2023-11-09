@@ -9,14 +9,14 @@ import java.util.UUID
 def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Either[DatabaseException, DatabaseMetadata]] =
   (for {
     string       <- EitherT.fromEither[IO](getStringToWrite(key, value))
-    existingSize <- EitherT.right(getExistingFileSize(engine.indices.head.path))
+    existingSize <- EitherT.right(getExistingFileSize(engine.logFiles.head.path))
     hasCapacity = (string.length + existingSize) <= engine.fileLimit
     updatedEngine <- if (hasCapacity) EitherT.right(IO.pure(engine)) else EitherT.right(createNewLogFile(engine))
-    i             <- EitherT.right(writeToFile(string, updatedEngine.indices.head.path))
-  } yield updatedEngine.withUpdatedLogFileIndex(updatedEngine.indices.head.index.updated(key, i))).value
+    i             <- EitherT.right(writeToFile(string, updatedEngine.logFiles.head.path))
+  } yield updatedEngine.withUpdatedLogFileIndex(updatedEngine.logFiles.head.index.updated(key, i))).value
 
 def getFromKey(key: String, metadata: DatabaseMetadata): IO[Either[DatabaseException, String]] =
-  findIndexFromLogFiles(key, metadata.indices) match
+  findIndexFromLogFiles(key, metadata.logFiles) match
     case Left(exception) => IO.pure(Left(exception))
     case Right((path, offset)) => readFromFile(offset, path).map {
         case Right((retrievedKey, value)) if retrievedKey == key => Right(value)
@@ -36,23 +36,23 @@ def compress(
   dbMetadata: DatabaseMetadata,
   fileNameUpdater: DatabaseMetadata => Path = newLogName
 ): IO[Either[DatabaseException, DatabaseMetadata]] = {
-  if (dbMetadata.indices.size < 3) {
-    IO.pure(Left(NotEnoughLogFilesToCompress(dbMetadata.indices.length)))
+  if (dbMetadata.logFiles.size < 3) {
+    IO.pure(Left(NotEnoughLogFilesToCompress(dbMetadata.logFiles.length)))
   } else {
-    val olderFile = dbMetadata.indices.last
-    val newerFile = dbMetadata.indices.dropRight(1).last
+    val olderFile = dbMetadata.logFiles.last
+    val newerFile = dbMetadata.logFiles.dropRight(1).last
 
     (for {
-      newFile      <- EitherT.right(createNewFile(fileNameUpdater(dbMetadata)))
-      updatedIndex <- writeMapToNewIndex(olderFile, newerFile, newFile)
-    } yield dbMetadata.copy(indices = List(LogFile(newFile, updatedIndex))))
+      newFile        <- EitherT.right(createNewFile(fileNameUpdater(dbMetadata)))
+      updatedLogFile <- writeMapToNewLogFile(olderFile, newerFile, newFile)
+    } yield dbMetadata.copy(logFiles = List(LogFile(newFile, updatedLogFile))))
       .value
       .flatTap(_ => deleteFile(olderFile.path))
       .flatTap(_ => deleteFile(newerFile.path))
   }
 }
 
-private def writeMapToNewIndex(
+private def writeMapToNewLogFile(
   olderFile: LogFile,
   newerFile: LogFile,
   newLogFileName: Path
