@@ -66,7 +66,7 @@ private def writeMapToNewLogFile(
     .traverse { case (key, (offset, path)) => writeToNewIndex(key, path, offset, newLogFileName) }
     .map(_.sequence.map(listMap => LogFile(newLogFileName, listMap.toMap))))
 
-def newLogName(dbMetadata: DatabaseMetadata) = Paths.get(UUID.randomUUID().toString + ".txt")
+def newLogName(dbMetadata: DatabaseMetadata) = Paths.get(dbMetadata.path.toString + "/" + UUID.randomUUID().toString + ".txt")
 
 private def writeToNewIndex(
   k: String,
