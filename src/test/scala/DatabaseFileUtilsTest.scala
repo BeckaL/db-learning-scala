@@ -87,8 +87,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
     incorrectlyFormattedThings.foreach(s => {
       writeToFile(s, existingLogFilePath).unsafeRunSync()
-      readFromFile(0, existingLogFilePath).unsafeRunSync().left
-        .getOrElse(throw new RuntimeException("Expected left but got right"))
+      readFromFile(0, existingLogFilePath).unsafeRunSync().getLeft
         .message should fullyMatch regex "Couldn't parse .+ as binary string".r
       Files.writeString(existingLogFilePath, "")
     })
@@ -110,8 +109,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
     incorrectlyFormattedThings.foreach((s, expectedSize, stringNotBigEnoughSize) => {
       writeToFile(s, existingLogFilePath).unsafeRunSync()
       readFromFile(0, existingLogFilePath).unsafeRunSync()
-        .left
-        .getOrElse(throw new RuntimeException("Expected left but got right"))
+        .getLeft
         .message shouldBe s"Expected a string of size $expectedSize but got string of size $stringNotBigEnoughSize"
       Files.writeString(existingLogFilePath, "")
     })
@@ -122,5 +120,10 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
     Files.deleteIfExists(newLogFilePath)
     Files.deleteIfExists(databasePath)
     Files.writeString(existingLogFilePath, "")
+  }
+
+  implicit class EitherOps[A, B](e: Either[A, B]) {
+    def getRight = e.getOrElse(throw new RuntimeException("expected right but got left"))
+    def getLeft  = e.left.getOrElse(throw new RuntimeException("expected left but got right"))
   }
 }

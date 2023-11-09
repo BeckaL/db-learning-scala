@@ -22,8 +22,10 @@ def createNewLogFile(databaseMetadata: DatabaseMetadata): IO[DatabaseMetadata] =
   val name = s"logFile${databaseMetadata.indices.length + 1}.txt"
   for {
     filePath <- tryIO(Paths.get(databaseMetadata.path.toString + "/" + name))
-    _        <- tryIO(Files.createFile(filePath))
+    _        <- createNewFile(filePath)
   } yield databaseMetadata.copy(indices = LogFile(filePath, Map()) +: databaseMetadata.indices)
+
+def createNewFile(path: Path): IO[Path] = tryIO(Files.createFile(path))
 
 def writeToFile(stringToWrite: String, location: Path): IO[Long] =
   for {
@@ -32,6 +34,14 @@ def writeToFile(stringToWrite: String, location: Path): IO[Long] =
   } yield index
 
 def getExistingFileSize(location: Path): IO[Long] = tryIO(Files.size(location))
+
+def deleteFile(location: Path): IO[Unit] = tryIO(Files.delete(location)).void
+
+def getStringToWrite(key: String, value: String): Either[String, String] =
+  for {
+    keySize   <- toPaddedBinaryString(key.length)
+    valueSize <- toPaddedBinaryString(value.length)
+  } yield keySize + key + valueSize + value
 
 def readFromFile(offset: Long, location: Path): IO[Either[DatabaseException, (String, String)]] = {
   (for {

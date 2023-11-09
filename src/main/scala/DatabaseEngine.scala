@@ -3,7 +3,8 @@ import cats.effect.IO
 import cats.implicits.*
 import model.{DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile}
 
-import java.nio.file.Path
+import java.nio.file.{Path, Paths}
+import java.util.UUID
 
 def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Either[String, DatabaseMetadata]] =
   (for {
@@ -30,11 +31,40 @@ private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[
     case firstLogFile :: others => firstLogFile.index.get(key) match
         case Some(i) => Right((firstLogFile.path, i))
         case None    => findIndexFromLogFiles(key, others)
-private def getStringToWrite(key: String, value: String): Either[String, String] =
-  for {
-    keySize   <- toPaddedBinaryString(key.length)
-    valueSize <- toPaddedBinaryString(value.length)
-  } yield keySize + key + valueSize + value
+
+def compress(dbMetadata: DatabaseMetadata, fileNameUpdater: DatabaseMetadata => Path = newLogName): IO[DatabaseMetadata] = {
+  val olderFile = dbMetadata.indices.last
+  val newerFile = dbMetadata.indices.dropRight(1).last
+
+  // Here we merge two maps with ++. The second map takes precedence in the case of duplicate keys i.e. newer takes precedence
+  val keysToFilePaths = olderFile.index.view.mapValues((_, olderFile.path)).toMap ++
+    newerFile.index.view.mapValues((_, newerFile.path))
+
+  (for {
+    newFile      <- EitherT.right(createNewFile(fileNameUpdater(dbMetadata)))
+    updatedIndex <- EitherT.right(writeMapToNewIndex(newFile, keysToFilePaths, newFile))
+  } yield dbMetadata.copy(indices = List(LogFile(newFile, updatedIndex))))
+    .value
+    .map(_.getOrElse(throw new RuntimeException("TODO")))
+    .flatTap(_ => deleteFile(olderFile.path))
+    .flatTap(_ => deleteFile(newerFile.path))
+}
+
+private def writeMapToNewIndex(path: Path, keysToFilePaths: Map[String, (Long, Path)], newLogFileName: Path): IO[Map[String, Long]] =
+  keysToFilePaths
+    .toList
+    .traverse { case (key, (offset, path)) => writeToNewIndex(key, path, offset, newLogFileName) }
+    .map(_.toMap)
+
+def newLogName(dbMetadata: DatabaseMetadata) = Paths.get(UUID.randomUUID().toString + ".txt")
+
+private def writeToNewIndex(k: String, pathToReadFrom: Path, offsetToReadFrom: Long, newIndex: Path): IO[(String, Long)] = {
+  (for {
+    value <- EitherT.apply(readFromFile(offsetToReadFrom, pathToReadFrom)) // TODO no check here for corruption
+    string: String <- EitherT.fromEither[IO](getStringToWrite(k, value._2))
+    index          <- EitherT.right(writeToFile(string, newIndex))
+  } yield (k, index)).value.map(_.getOrElse(throw new RuntimeException("uh oh")))
+}
 
 private def toPaddedBinaryString(i: Int): Either[String, String] =
   val binString = i.toBinaryString

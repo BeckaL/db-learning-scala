@@ -4,10 +4,11 @@ import model.{DatabaseMetadata, LogFile, ReadTooSmallValue}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
 
 import java.nio.file.{Files, Paths}
 
-class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
+class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach with TableDrivenPropertyChecks {
   private val logFileName               = "logFile1.txt"
   private val existingDatabasePath      = Paths.get("./src/test/resources/DatabaseEngineIntegrationTestDatabase")
   private val existingLogFilePath       = Paths.get(s"./src/test/resources/DatabaseEngineIntegrationTestDatabase/$logFileName")
@@ -18,6 +19,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   private val myValue                   = "myValue"
   private val valueSize                 = "00000111"
   private val keyValueString            = keySize + myKey + valueSize + myValue
+  private val newLogFilePath            = Paths.get(s"./src/test/resources/DatabaseEngineIntegrationTestDatabase/afterCompressLogFile.txt")
 
   "write" should "update the index when it is empty" in {
     val databaseEngine = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())), 1000L)
@@ -57,7 +59,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     val expectedNewLogFile = LogFile(thirdLogFilePath, Map(myKey -> 0))
 
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync()
-      .getOrElse(throw new RuntimeException("expected right but got left"))
+      .getRight
       .indices shouldBe expectedNewLogFile +: existingLogFiles
     Files.exists(thirdLogFilePath) shouldBe true
   }
@@ -120,8 +122,8 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
     getFromKey(myKey, databaseMetadata)
       .unsafeRunSync()
-      .left
-      .getOrElse(throw new RuntimeException("expected result to be a left")).message shouldBe
+      .getLeft
+      .message shouldBe
       s"Could not find key $myKey in indices"
   }
 
@@ -130,8 +132,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     val differentKey     = "anotherKey"
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(differentKey -> 0))), 1000L)
 
-    getFromKey(differentKey, databaseMetadata).unsafeRunSync().left
-      .getOrElse(throw new RuntimeException("expected result to be a left"))
+    getFromKey(differentKey, databaseMetadata).unsafeRunSync().getLeft
       .message shouldBe
       s"Expected to find key $differentKey in logfile $existingLogFilePath at index 0 but found $myKey, the index may be corrupted"
   }
@@ -141,15 +142,67 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     Files.writeString(existingLogFilePath, keySize + myKey + valueSize + notTheCorrectValue)
     val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(myKey -> 0))), 1000L)
 
-    getFromKey(myKey, databaseMetadata).unsafeRunSync().left
-      .getOrElse(throw new RuntimeException("expected result to be a left"))
+    getFromKey(myKey, databaseMetadata).unsafeRunSync().getLeft
       .message shouldBe
       s"Expected a string of size ${myValue.size} but got string of size ${notTheCorrectValue.length}"
   }
 
+  "compress" should "successfully compress two files into one" in {
+    val firstKeyString        = getStringToWrite("firstKey", "firstValue").getRight
+    val secondKeyString       = getStringToWrite("secondKey", "secondValue").getRight
+    val thirdKeyString        = getStringToWrite("thirdKey", "thirdValue").getRight
+    val fourthKeyString       = getStringToWrite("fourthKey", "fourthValue").getRight
+    val firstKeyStringUpdated = getStringToWrite("firstKey", "aDifferentFirstValue").getRight
+
+    writeToFile(firstKeyString + secondKeyString + thirdKeyString, existingLogFilePath).unsafeRunSync()
+    writeToFile(firstKeyStringUpdated + fourthKeyString, secondExistingLogFilePath).unsafeRunSync()
+
+    val i: Int        = firstKeyString.length + secondKeyString.length
+    val olderIndexMap = Map("firstKey" -> 0L, "secondKey" -> firstKeyString.length.toLong, "thirdKey" -> i.toLong)
+    val newerIndexMap = Map("firstKey" -> 0L, "fourthKey" -> firstKeyStringUpdated.length.toLong)
+    val databaseMetadata = DatabaseMetadata(
+      existingDatabasePath,
+      List(LogFile(secondExistingLogFilePath, newerIndexMap), LogFile(existingLogFilePath, olderIndexMap)),
+      1000L
+    )
+
+    val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync()
+
+    updatedMetadata.indices.size shouldBe 1
+    updatedMetadata.indices.head.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
+    updatedMetadata.indices.head.path shouldBe newLogFilePath
+
+    Files.exists(existingLogFilePath) shouldBe false
+    Files.exists(secondExistingLogFilePath) shouldBe false
+
+    val expectedValues = Table(
+      ("key", "value"),
+      ("firstKey", "aDifferentFirstValue"),
+      ("secondKey", "secondValue"),
+      ("thirdKey", "thirdValue"),
+      ("fourthKey", "fourthValue")
+    )
+
+    expectedValues.forEvery((key, value) =>
+      getFromKey(key, updatedMetadata).unsafeRunSync().getRight shouldBe value
+    )
+  }
+
+  override def beforeEach(): Unit = {
+    Files.createFile(existingLogFilePath)
+    Files.createFile(secondExistingLogFilePath)
+  }
+
   override def afterEach() = {
-    Files.writeString(existingLogFilePath, "")
-    Files.writeString(secondExistingLogFilePath, "")
+    Files.deleteIfExists(existingLogFilePath)
+    Files.deleteIfExists(secondExistingLogFilePath)
     Files.deleteIfExists(thirdLogFilePath)
+    Files.deleteIfExists(newLogFilePath)
+  }
+
+  implicit class EitherOps[A, B](e: Either[A, B]) {
+    def getRight = e.getOrElse(throw new RuntimeException("expected right but got left"))
+
+    def getLeft = e.left.getOrElse(throw new RuntimeException("expected left but got right"))
   }
 }
