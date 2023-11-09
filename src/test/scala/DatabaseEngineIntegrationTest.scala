@@ -174,6 +174,8 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     updatedMetadata.logFiles.last.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
     updatedMetadata.logFiles.last.path shouldBe newLogFilePath
 
+    Files.exists(newLogFilePath) shouldBe true
+
     List(existingLogFilePath, secondExistingLogFilePath).foreach(Files.exists(_) shouldBe false)
 
     val expectedValues = Table(
