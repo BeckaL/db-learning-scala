@@ -37,7 +37,7 @@ def getExistingFileSize(location: Path): IO[Long] = tryIO(Files.size(location))
 
 def deleteFile(location: Path): IO[Unit] = tryIO(Files.delete(location)).void
 
-def getStringToWrite(key: String, value: String): Either[String, String] =
+def getStringToWrite(key: String, value: String): Either[DatabaseException, String] =
   for {
     keySize   <- toPaddedBinaryString(key.length)
     valueSize <- toPaddedBinaryString(value.length)

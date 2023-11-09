@@ -19,3 +19,7 @@ case class ReadTooSmallValue(expectedSize: Int, actualSize: Int) extends Databas
 case class UnparseableBinaryString(s: String) extends DatabaseException {
   val message = s"Couldn't parse $s as binary string"
 }
+
+case class BinaryStringLengthExceeded(i: Int) extends DatabaseException {
+  val message = s"Tried to store string of length $i, this was more than the allowed size"
+}

@@ -1,12 +1,12 @@
 import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
-import model.{DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile}
+import model.{BinaryStringLengthExceeded, DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile}
 
 import java.nio.file.{Path, Paths}
 import java.util.UUID
 
-def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Either[String, DatabaseMetadata]] =
+def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Either[DatabaseException, DatabaseMetadata]] =
   (for {
     string       <- EitherT.fromEither[IO](getStringToWrite(key, value))
     existingSize <- EitherT.right(getExistingFileSize(engine.indices.head.path))
@@ -32,7 +32,10 @@ private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[
         case Some(i) => Right((firstLogFile.path, i))
         case None    => findIndexFromLogFiles(key, others)
 
-def compress(dbMetadata: DatabaseMetadata, fileNameUpdater: DatabaseMetadata => Path = newLogName): IO[DatabaseMetadata] = {
+def compress(
+  dbMetadata: DatabaseMetadata,
+  fileNameUpdater: DatabaseMetadata => Path = newLogName
+): IO[Either[DatabaseException, DatabaseMetadata]] = {
   val olderFile = dbMetadata.indices.last
   val newerFile = dbMetadata.indices.dropRight(1).last
 
@@ -45,7 +48,6 @@ def compress(dbMetadata: DatabaseMetadata, fileNameUpdater: DatabaseMetadata => 
     updatedIndex <- EitherT.right(writeMapToNewIndex(newFile, keysToFilePaths, newFile))
   } yield dbMetadata.copy(indices = List(LogFile(newFile, updatedIndex))))
     .value
-    .map(_.getOrElse(throw new RuntimeException("TODO")))
     .flatTap(_ => deleteFile(olderFile.path))
     .flatTap(_ => deleteFile(newerFile.path))
 }
@@ -66,9 +68,9 @@ private def writeToNewIndex(k: String, pathToReadFrom: Path, offsetToReadFrom: L
   } yield (k, index)).value.map(_.getOrElse(throw new RuntimeException("uh oh")))
 }
 
-private def toPaddedBinaryString(i: Int): Either[String, String] =
+private def toPaddedBinaryString(i: Int): Either[DatabaseException, String] =
   val binString = i.toBinaryString
   if (binString.length > 8)
-    Left(s"Tried to store string of length $i, this was more than the allowed size")
+    Left(BinaryStringLengthExceeded(binString.length))
   else
     Right("0" * (8 - binString.length) + binString)

@@ -166,7 +166,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
       1000L
     )
 
-    val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync()
+    val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync().getRight
 
     updatedMetadata.indices.size shouldBe 1
     updatedMetadata.indices.head.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
