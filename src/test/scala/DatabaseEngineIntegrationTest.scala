@@ -196,6 +196,17 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
       s"and one live file to compress, but there were only 2 files in total"
   }
 
+  it should "bubble up a lower level exception" in {
+    val malformedKey = keySize + myKey + valueSize + "a"
+
+    writeToFile(malformedKey, existingLogFilePath).unsafeRunSync()
+    val indexWithMalformedKey = LogFile(existingLogFilePath, Map(myKey -> 0))
+    val indices               = List(LogFile.empty(thirdLogFilePath), LogFile.empty(secondExistingLogFilePath), indexWithMalformedKey)
+    val databaseMetadata      = DatabaseMetadata(existingDatabasePath, indices, 1000L)
+
+    compress(databaseMetadata).unsafeRunSync().getLeft.message shouldBe "Expected a string of size 7 but got string of size 1"
+  }
+
   override def beforeEach(): Unit = {
     Files.createFile(existingLogFilePath)
     Files.createFile(secondExistingLogFilePath)

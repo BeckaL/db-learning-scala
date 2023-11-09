@@ -42,13 +42,9 @@ def compress(
     val olderFile = dbMetadata.indices.last
     val newerFile = dbMetadata.indices.dropRight(1).last
 
-    // Here we merge two maps with ++. The second map takes precedence in the case of duplicate keys i.e. newer takes precedence
-    val keysToFilePaths = olderFile.index.view.mapValues((_, olderFile.path)).toMap ++
-      newerFile.index.view.mapValues((_, newerFile.path))
-
     (for {
       newFile      <- EitherT.right(createNewFile(fileNameUpdater(dbMetadata)))
-      updatedIndex <- EitherT.right(writeMapToNewIndex(newFile, keysToFilePaths, newFile))
+      updatedIndex <- writeMapToNewIndex(olderFile, newerFile, newFile)
     } yield dbMetadata.copy(indices = List(LogFile(newFile, updatedIndex))))
       .value
       .flatTap(_ => deleteFile(olderFile.path))
@@ -56,20 +52,33 @@ def compress(
   }
 }
 
-private def writeMapToNewIndex(path: Path, keysToFilePaths: Map[String, (Long, Path)], newLogFileName: Path): IO[Map[String, Long]] =
-  keysToFilePaths
+private def writeMapToNewIndex(
+  olderFile: LogFile,
+  newerFile: LogFile,
+  newLogFileName: Path
+): EitherT[IO, DatabaseException, Map[String, Long]] =
+  // Here we merge two maps with ++. The second map takes precedence in the case of duplicate keys i.e. newer takes precedence
+  val keysToFilePaths = olderFile.index.view.mapValues((_, olderFile.path)).toMap ++
+    newerFile.index.view.mapValues((_, newerFile.path))
+
+  EitherT.apply(keysToFilePaths
     .toList
     .traverse { case (key, (offset, path)) => writeToNewIndex(key, path, offset, newLogFileName) }
-    .map(_.toMap)
+    .map(_.sequence.map(_.toMap)))
 
 def newLogName(dbMetadata: DatabaseMetadata) = Paths.get(UUID.randomUUID().toString + ".txt")
 
-private def writeToNewIndex(k: String, pathToReadFrom: Path, offsetToReadFrom: Long, newIndex: Path): IO[(String, Long)] = {
+private def writeToNewIndex(
+  k: String,
+  pathToReadFrom: Path,
+  offsetToReadFrom: Long,
+  newIndex: Path
+): IO[Either[DatabaseException, (String, Long)]] = {
   (for {
     value <- EitherT.apply(readFromFile(offsetToReadFrom, pathToReadFrom)) // TODO no check here for corruption
     string: String <- EitherT.fromEither[IO](getStringToWrite(k, value._2))
     index          <- EitherT.right(writeToFile(string, newIndex))
-  } yield (k, index)).value.map(_.getOrElse(throw new RuntimeException("uh oh")))
+  } yield (k, index)).value
 }
 
 private def toPaddedBinaryString(i: Int): Either[DatabaseException, String] =
