@@ -25,7 +25,7 @@ def createNewLogFile(databaseMetadata: DatabaseMetadata): IO[DatabaseMetadata] =
     _        <- createNewFile(filePath)
   } yield databaseMetadata.copy(logFiles = LogFile(filePath, Map()) +: databaseMetadata.logFiles)
 
-def createNewFile(path: Path): IO[Path] = tryIO(Files.createFile(path))
+def createNewFile(path: Path): IO[Path] = tryIO(Files.createFile(path)) //TODO make this the standard way of creating new name
 
 def writeToFile(stringToWrite: String, location: Path): IO[Long] =
   for {
