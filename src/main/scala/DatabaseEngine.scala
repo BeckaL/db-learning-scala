@@ -45,7 +45,7 @@ def compress(
     (for {
       newFile        <- EitherT.right(createNewFile(fileNameUpdater(dbMetadata)))
       updatedLogFile <- writeMapToNewLogFile(olderFile, newerFile, newFile)
-    } yield dbMetadata.copy(logFiles = List(LogFile(newFile, updatedLogFile))))
+    } yield dbMetadata.copy(logFiles = dbMetadata.logFiles.dropRight(2) :+ updatedLogFile))
       .value
       .flatTap(_ => deleteFile(olderFile.path))
       .flatTap(_ => deleteFile(newerFile.path))
@@ -56,7 +56,7 @@ private def writeMapToNewLogFile(
   olderFile: LogFile,
   newerFile: LogFile,
   newLogFileName: Path
-): EitherT[IO, DatabaseException, Map[String, Long]] =
+): EitherT[IO, DatabaseException, LogFile] =
   // Here we merge two maps with ++. The second map takes precedence in the case of duplicate keys i.e. newer takes precedence
   val keysToFilePaths = olderFile.index.view.mapValues((_, olderFile.path)).toMap ++
     newerFile.index.view.mapValues((_, newerFile.path))
@@ -64,7 +64,7 @@ private def writeMapToNewLogFile(
   EitherT.apply(keysToFilePaths
     .toList
     .traverse { case (key, (offset, path)) => writeToNewIndex(key, path, offset, newLogFileName) }
-    .map(_.sequence.map(_.toMap)))
+    .map(_.sequence.map(listMap => LogFile(newLogFileName, listMap.toMap))))
 
 def newLogName(dbMetadata: DatabaseMetadata) = Paths.get(UUID.randomUUID().toString + ".txt")
 

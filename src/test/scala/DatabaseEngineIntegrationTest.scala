@@ -170,9 +170,9 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
     val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync().getRight
 
-    updatedMetadata.logFiles.size shouldBe 1
-    updatedMetadata.logFiles.head.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
-    updatedMetadata.logFiles.head.path shouldBe newLogFilePath
+    updatedMetadata.logFiles.size shouldBe 2
+    updatedMetadata.logFiles.last.index.keys.toSet shouldBe Set("firstKey", "secondKey", "thirdKey", "fourthKey")
+    updatedMetadata.logFiles.last.path shouldBe newLogFilePath
 
     List(existingLogFilePath, secondExistingLogFilePath).foreach(Files.exists(_) shouldBe false)
 
