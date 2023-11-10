@@ -1,6 +1,6 @@
 import SimpleKeyValueStore.SimpleDatabaseMetadata
 import cats.effect.unsafe.implicits.global
-import model.LogFile
+import model.{KeyNotFoundInIndices, LogFile, UnparseableBinaryString}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -115,6 +115,44 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
         .message shouldBe s"Expected a string of size $expectedSize but got string of size $stringNotBigEnoughSize"
       Files.writeString(existingLogFilePath, "")
     })
+  }
+
+  "scanFileForKey" should "correctly retrieve a key" in {
+    val firstString        = getStringToWrite("someKey", "someValue").getRight
+    val secondString       = getStringToWrite("anotherKey", "anotherValue").getRight
+    val searchingForString = getStringToWrite(myKey, myValue).getRight
+    val fourthString       = getStringToWrite("fourthString", "fourthString").getRight
+    val fifthString        = getStringToWrite("fifthString", "fifthValue").getRight
+
+    val withinSegment = firstString + secondString + searchingForString + fourthString
+
+    Files.writeString(existingLogFilePath, withinSegment + fifthString)
+
+    scanFileForKey(0, withinSegment.size, existingLogFilePath, myKey).unsafeRunSync() shouldBe Right(myValue)
+  }
+
+  it should "return left when a key is not found in the segment" in {
+    val firstString   = getStringToWrite("someKey", "someValue").getRight
+    val secondString  = getStringToWrite("anotherKey", "anotherValue").getRight
+    val thirdString   = getStringToWrite("thirdString", "thirdValue").getRight
+    val withinSegment = firstString + secondString + thirdString
+    val fourthString  = getStringToWrite("fourthString", "fourthString").getRight
+    Files.writeString(existingLogFilePath, withinSegment + fourthString)
+
+    scanFileForKey(0, withinSegment.size, existingLogFilePath, myKey).unsafeRunSync() shouldBe Left(KeyNotFoundInIndices(myKey))
+  }
+
+  it should "bubble up a lower level error" in {
+    val firstString  = getStringToWrite("someKey", "someValue").getRight
+    val secondString = "000" + "keyForMalformattedEntry" + valueSize + myValue
+    val thirdString  = getStringToWrite(myKey, myValue).getRight
+    val fourthString = getStringToWrite("fourthString", "fourthString").getRight
+
+    val withinSegment = firstString + secondString + thirdString + fourthString
+
+    Files.writeString(existingLogFilePath, withinSegment)
+
+    scanFileForKey(0, withinSegment.size, existingLogFilePath, myKey).unsafeRunSync().getLeft shouldBe a[UnparseableBinaryString]
   }
 
   override def afterEach(): Unit = {

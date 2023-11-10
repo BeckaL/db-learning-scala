@@ -36,8 +36,8 @@ private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[
         case None    => findIndexFromLogFiles(key, others)
 
 def compress(
-              dbMetadata: SimpleDatabaseMetadata,
-              fileNameUpdater: SimpleDatabaseMetadata => Path = newLogName
+  dbMetadata: SimpleDatabaseMetadata,
+  fileNameUpdater: SimpleDatabaseMetadata => Path = newLogName
 ): IO[Either[DatabaseException, SimpleDatabaseMetadata]] = {
   if (dbMetadata.logFiles.size < 3) {
     IO.pure(Left(NotEnoughLogFilesToCompress(dbMetadata.logFiles.length)))

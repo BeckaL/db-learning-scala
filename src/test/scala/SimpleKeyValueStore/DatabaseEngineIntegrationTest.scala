@@ -168,8 +168,9 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
         "thirdKey"  -> (firstKeyString.length + secondKeyString.length)
       )
     )
-    val newerLogFile     = LogFile(secondExistingLogFilePath, Map("firstKey" -> 0, "fourthKey" -> firstKeyStringUpdated.length))
-    val databaseMetadata = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile.empty(thirdLogFilePath), newerLogFile, olderLogFile), 1000L)
+    val newerLogFile = LogFile(secondExistingLogFilePath, Map("firstKey" -> 0, "fourthKey" -> firstKeyStringUpdated.length))
+    val databaseMetadata =
+      SimpleDatabaseMetadata(existingDatabasePath, List(LogFile.empty(thirdLogFilePath), newerLogFile, olderLogFile), 1000L)
 
     val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync().getRight
 
@@ -194,7 +195,11 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   it should "return an error if there are less than three log files" in {
     val databaseMetadata =
-      SimpleDatabaseMetadata(existingDatabasePath, List(LogFile.empty(existingLogFilePath), LogFile.empty(secondExistingLogFilePath)), 1000L)
+      SimpleDatabaseMetadata(
+        existingDatabasePath,
+        List(LogFile.empty(existingLogFilePath), LogFile.empty(secondExistingLogFilePath)),
+        1000L
+      )
 
     compress(databaseMetadata).unsafeRunSync().getLeft.message shouldBe
       s"There were not enough log files to compress: need at least two dormant log files " +

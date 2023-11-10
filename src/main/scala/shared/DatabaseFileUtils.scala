@@ -3,7 +3,7 @@ package shared
 import SimpleKeyValueStore.SimpleDatabaseMetadata
 import cats.data.EitherT
 import cats.effect.IO
-import model.{BinaryStringLengthExceeded, DatabaseException, LogFile, ReadTooSmallValue, UnparseableBinaryString}
+import model.{BinaryStringLengthExceeded, DatabaseException, KeyNotFoundInIndices, LogFile, ReadTooSmallValue, UnparseableBinaryString}
 
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -11,7 +11,11 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 import scala.util.{Failure, Success, Try}
 
-def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String, logFileSizeLimit: Long): IO[SimpleDatabaseMetadata] =
+def createDatabaseEngine(
+  locationPrefix: String = "./src/main/resources",
+  name: String,
+  logFileSizeLimit: Long
+): IO[SimpleDatabaseMetadata] =
   val directoryPathString = locationPrefix + "/" + name
 
   for {
@@ -46,17 +50,28 @@ def getStringToWrite(key: String, value: String): Either[DatabaseException, Stri
     valueSize <- toPaddedBinaryString(value.length)
   } yield keySize + key + valueSize + value
 
-def readFromFile(offset: Long, location: Path): IO[Either[DatabaseException, (String, String)]] = {
+def readFromFile(offset: Long, location: Path): IO[Either[DatabaseException, (String, String)]] =
+  readFromFileReturningPosition(offset, location).map(_.map((key, value, _) => (key, value)))
+
+private def readFromFileReturningPosition(offset: Long, location: Path): IO[Either[DatabaseException, (String, String, Long)]] = {
   (for {
-    fileChannel <- EitherT.right(tryIO(FileChannel.open(location)))
-    _ = fileChannel.position(offset)
-    keySize   <- readBinaryIntegerFromFile(fileChannel)
-    key       <- EitherT.apply(tryIO(readChunkFromFile(keySize, fileChannel)))
-    valueSize <- readBinaryIntegerFromFile(fileChannel)
-    value     <- EitherT.apply(tryIO(readChunkFromFile(valueSize, fileChannel)))
-    _ = fileChannel.close()
-  } yield (key, value)).value
+    fileChannel <- EitherT.right(tryIO(FileChannel.open(location).position(offset)))
+    keySize     <- readBinaryIntegerFromFile(fileChannel)
+    key         <- EitherT.apply(tryIO(readChunkFromFile(keySize, fileChannel)))
+    valueSize   <- readBinaryIntegerFromFile(fileChannel)
+    value       <- EitherT.apply(tryIO(readChunkFromFile(valueSize, fileChannel)))
+    position = fileChannel.position()
+    _        = fileChannel.close()
+  } yield (key, value, position)).value
 }
+
+def scanFileForKey(startOffset: Long, until: Long, location: Path, keyToFind: String): IO[Either[DatabaseException, String]] =
+  readFromFileReturningPosition(startOffset, location).flatMap {
+    case Right((key, value, _)) if key == keyToFind         => IO.pure(Right(value))
+    case Right((_, _, endPosition)) if endPosition >= until => IO.pure(Left(KeyNotFoundInIndices(keyToFind)))
+    case Right((_, _, endPosition))                         => scanFileForKey(endPosition, until, location, keyToFind)
+    case Left(databaseException)                            => IO.pure(Left(databaseException))
+  }
 
 private def readBinaryIntegerFromFile(fileChannel: FileChannel): EitherT[IO, DatabaseException, Integer] =
   for {
@@ -67,6 +82,7 @@ private def readBinaryIntegerFromFile(fileChannel: FileChannel): EitherT[IO, Dat
     }
   } yield integer
 
+//This should be EitherT of IO-ified
 private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): Either[DatabaseException, String] =
   val buffer = ByteBuffer.allocate(byteBufferSize)
   while (buffer.hasRemaining && fileChannel.position() < fileChannel.size())

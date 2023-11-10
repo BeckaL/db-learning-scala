@@ -18,8 +18,8 @@ def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseExceptio
 private def attemptToReadFromLogFiles(logFiles: List[LogFile], key: String): IO[Either[DatabaseException, String]] =
   logFiles match {
     case firstLogFile :: others => firstLogFile.index.get(key) match {
-      case None => attemptToReadFromLogFiles(others, key)
-      case Some(offset) => readFromFile(offset, firstLogFile.path).map(_.map(_._2))
-    }
+        case None         => attemptToReadFromLogFiles(others, key)
+        case Some(offset) => readFromFile(offset, firstLogFile.path).map(_.map(_._2))
+      }
     case Nil => IO.pure(Left(KeyNotFoundInIndices(key)))
   }

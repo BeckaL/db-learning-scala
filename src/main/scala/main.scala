@@ -42,7 +42,11 @@ private def doAction(input: List[String], initialMd: SimpleDatabaseMetadata): Si
   dbToReturn
 }
 
-private def store(keyToStore: String, valueToStore: String, metadata: SimpleDatabaseMetadata): Either[String, (String, SimpleDatabaseMetadata)] =
+private def store(
+  keyToStore: String,
+  valueToStore: String,
+  metadata: SimpleDatabaseMetadata
+): Either[String, (String, SimpleDatabaseMetadata)] =
   storeKeyValue(keyToStore, valueToStore, metadata).unsafeRunSync() match {
     case Right(md) => Right("Successfully stored", md)
     case Left(err) => Left(err.message)

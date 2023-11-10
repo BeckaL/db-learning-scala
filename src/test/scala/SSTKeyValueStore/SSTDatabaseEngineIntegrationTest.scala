@@ -10,10 +10,10 @@ import shared.getStringToWrite
 import java.nio.file.{Files, Paths}
 import scala.collection.immutable.TreeMap
 
-class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach{
-  private val myKey   = "myKey"
-  private val myValue = "myValue"
-  private val databasePath = Paths.get("./src/test/resources/SSTDatabaseEngineIntegrationTest")
+class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach {
+  private val myKey           = "myKey"
+  private val myValue         = "myValue"
+  private val databasePath    = Paths.get("./src/test/resources/SSTDatabaseEngineIntegrationTest")
   private val existingLogFile = Paths.get(databasePath.toString + "/" + "logFile1.txt")
   "write" should "write to a thing" in {
     write(SSTDatabaseMetadata(TreeMap(), List()), myKey, myValue) shouldBe TreeMap(myKey -> myValue)
@@ -26,7 +26,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
 
   it should "read from a logfile when the entry is directly in the index" in {
     Files.writeString(existingLogFile, getStringToWrite(myKey, myValue).getOrElse(throw new RuntimeException("oops")))
-    val logFile = LogFile(existingLogFile, Map(myKey -> 0))
+    val logFile  = LogFile(existingLogFile, Map(myKey -> 0))
     val metadata = SSTDatabaseMetadata(TreeMap("anotherKey" -> "anotherValue"), List(logFile))
 
     read(metadata, myKey).unsafeRunSync() shouldBe Right(myValue)
