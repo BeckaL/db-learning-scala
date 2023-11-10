@@ -5,6 +5,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
+import SimpleKeyValueStore.*
+import shared.*
 
 import java.io.File
 import java.nio.file.{Files, Paths}

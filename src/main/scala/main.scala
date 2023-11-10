@@ -1,5 +1,7 @@
 import cats.effect.*
 import model.{DatabaseException, DatabaseMetadata}
+import shared.createDatabaseEngine
+import SimpleKeyValueStore.*
 
 import scala.io.StdIn.readLine
 import cats.effect.unsafe.implicits.global //YOLO this shouldn't be here but ah well

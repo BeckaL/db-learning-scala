@@ -1,7 +1,10 @@
+package SimpleKeyValueStore
+
 import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
 import model.{BinaryStringLengthExceeded, DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile, NotEnoughLogFilesToCompress}
+import shared.{getStringToWrite, readFromFile, writeToFile, getExistingFileSize, createNewLogFile, createNewFile, deleteFile}
 
 import java.nio.file.{Path, Paths}
 import java.util.UUID
@@ -81,9 +84,3 @@ private def writeToNewIndex(
   } yield (k, index)).value
 }
 
-private def toPaddedBinaryString(i: Int): Either[DatabaseException, String] =
-  val binString = i.toBinaryString
-  if (binString.length > 8)
-    Left(BinaryStringLengthExceeded(binString.length))
-  else
-    Right("0" * (8 - binString.length) + binString)

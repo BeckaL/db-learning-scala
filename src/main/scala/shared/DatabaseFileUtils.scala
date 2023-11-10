@@ -1,6 +1,8 @@
+package shared
+
 import cats.data.EitherT
 import cats.effect.IO
-import model.{DatabaseException, DatabaseMetadata, LogFile, ReadTooSmallValue, UnparseableBinaryString}
+import model.{BinaryStringLengthExceeded, DatabaseException, DatabaseMetadata, LogFile, ReadTooSmallValue, UnparseableBinaryString}
 
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -77,3 +79,10 @@ private def readChunkFromFile(byteBufferSize: Int, fileChannel: FileChannel): Ei
     Right(Charset.forName("UTF-8").decode(buffer).toString)
 
 private def tryIO[T](f: T): IO[T] = IO.fromTry(Try(f))
+
+private def toPaddedBinaryString(i: Int): Either[DatabaseException, String] =
+  val binString = i.toBinaryString
+  if (binString.length > 8)
+    Left(BinaryStringLengthExceeded(binString.length))
+  else
+    Right("0" * (8 - binString.length) + binString)
