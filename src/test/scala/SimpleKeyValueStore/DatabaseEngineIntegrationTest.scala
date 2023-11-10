@@ -6,6 +6,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 
+import java.io.File
 import java.nio.file.{Files, Paths}
 
 class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with BeforeAndAfterEach with TableDrivenPropertyChecks {
@@ -210,15 +211,23 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   }
 
   override def beforeEach(): Unit = {
+    if (!Files.exists(existingDatabasePath)) {
+      Files.createDirectory(existingDatabasePath)
+    }
     Files.createFile(existingLogFilePath)
     Files.createFile(secondExistingLogFilePath)
   }
 
   override def afterEach() = {
+    val dir = new File(existingDatabasePath.toString)
+    dir.listFiles().foreach {file =>
+      file.delete()
+    }
     Files.deleteIfExists(existingLogFilePath)
     Files.deleteIfExists(secondExistingLogFilePath)
     Files.deleteIfExists(thirdLogFilePath)
     Files.deleteIfExists(newLogFilePath)
+    Files.deleteIfExists(existingDatabasePath)
   }
 
   implicit class EitherOps[A, B](e: Either[A, B]) {

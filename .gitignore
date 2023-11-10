@@ -3,3 +3,4 @@ target
 .idea
 project/target/
 .bsp
+src/main/resources/*
