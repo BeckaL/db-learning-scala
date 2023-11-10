@@ -222,7 +222,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   override def afterEach() = {
     val dir = new File(existingDatabasePath.toString)
-    dir.listFiles().foreach {file =>
+    dir.listFiles().foreach { file =>
       file.delete()
     }
     Files.deleteIfExists(existingLogFilePath)

@@ -16,7 +16,7 @@ def main(args: Array[String]): Unit = {
     if (metadata.logFiles.size > 2) {
       println("compressing")
       compress(metadata).unsafeRunSync() match {
-        case Left(e) => println(e)
+        case Left(e)                   => println(e)
         case Right(compressedMetadata) => metadata = compressedMetadata
       }
     }
