@@ -1,5 +1,6 @@
+import SimpleKeyValueStore.SimpleDatabaseMetadata
 import cats.effect.unsafe.implicits.global
-import model.{DatabaseMetadata, LogFile}
+import model.LogFile
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -23,7 +24,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
   private val newLogFilePath       = Paths.get(databasePath.toString + "/logFile2.txt")
 
   "create database engine" should "create a new folder and log file" in {
-    val expectedDatabase = DatabaseMetadata(databasePath, List(LogFile(logFilePath, Map())), 1000L)
+    val expectedDatabase = SimpleDatabaseMetadata(databasePath, List(LogFile(logFilePath, Map())), 1000L)
 
     createDatabaseEngine(prefix, "myDatabase", 1000L).unsafeRunSync() shouldBe expectedDatabase
 
@@ -33,7 +34,7 @@ class DatabaseFileUtilsTest extends AnyFlatSpec with Matchers with BeforeAndAfte
 
   "create new logfile" should "create a new log file prepended to the existing log files" in {
     val initialLogFile   = LogFile(logFilePath, Map())
-    val expectedDatabase = DatabaseMetadata(databasePath, List(initialLogFile), 1000L)
+    val expectedDatabase = SimpleDatabaseMetadata(databasePath, List(initialLogFile), 1000L)
     val metadata         = createDatabaseEngine(prefix, "myDatabase", 1000L).unsafeRunSync()
 
     val updatedMetadata = createNewLogFile(metadata).unsafeRunSync()

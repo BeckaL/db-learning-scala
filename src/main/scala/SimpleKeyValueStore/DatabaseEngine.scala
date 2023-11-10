@@ -3,13 +3,13 @@ package SimpleKeyValueStore
 import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
-import model.{BinaryStringLengthExceeded, DatabaseException, DatabaseMetadata, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile, NotEnoughLogFilesToCompress}
+import model.{BinaryStringLengthExceeded, DatabaseException, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile, NotEnoughLogFilesToCompress}
 import shared.{getStringToWrite, readFromFile, writeToFile, getExistingFileSize, createNewLogFile, createNewFile, deleteFile}
 
 import java.nio.file.{Path, Paths}
 import java.util.UUID
 
-def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Either[DatabaseException, DatabaseMetadata]] =
+def storeKeyValue(key: String, value: String, engine: SimpleDatabaseMetadata): IO[Either[DatabaseException, SimpleDatabaseMetadata]] =
   (for {
     string       <- EitherT.fromEither[IO](getStringToWrite(key, value))
     existingSize <- EitherT.right(getExistingFileSize(engine.logFiles.head.path))
@@ -18,7 +18,7 @@ def storeKeyValue(key: String, value: String, engine: DatabaseMetadata): IO[Eith
     i             <- EitherT.right(writeToFile(string, updatedEngine.logFiles.head.path))
   } yield updatedEngine.withUpdatedLogFileIndex(updatedEngine.logFiles.head.index.updated(key, i))).value
 
-def getFromKey(key: String, metadata: DatabaseMetadata): IO[Either[DatabaseException, String]] =
+def getFromKey(key: String, metadata: SimpleDatabaseMetadata): IO[Either[DatabaseException, String]] =
   findIndexFromLogFiles(key, metadata.logFiles) match
     case Left(exception) => IO.pure(Left(exception))
     case Right((path, offset)) => readFromFile(offset, path).map {
@@ -36,9 +36,9 @@ private def findIndexFromLogFiles(key: String, logFiles: List[LogFile]): Either[
         case None    => findIndexFromLogFiles(key, others)
 
 def compress(
-  dbMetadata: DatabaseMetadata,
-  fileNameUpdater: DatabaseMetadata => Path = newLogName
-): IO[Either[DatabaseException, DatabaseMetadata]] = {
+              dbMetadata: SimpleDatabaseMetadata,
+              fileNameUpdater: SimpleDatabaseMetadata => Path = newLogName
+): IO[Either[DatabaseException, SimpleDatabaseMetadata]] = {
   if (dbMetadata.logFiles.size < 3) {
     IO.pure(Left(NotEnoughLogFilesToCompress(dbMetadata.logFiles.length)))
   } else {
@@ -69,7 +69,7 @@ private def writeMapToNewLogFile(
     .traverse { case (key, (offset, path)) => writeToNewIndex(key, path, offset, newLogFileName) }
     .map(_.sequence.map(listMap => LogFile(newLogFileName, listMap.toMap))))
 
-def newLogName(dbMetadata: DatabaseMetadata) =
+def newLogName(dbMetadata: SimpleDatabaseMetadata) =
   Paths.get(dbMetadata.path.toString + "/" + UUID.randomUUID().toString + ".txt") // need to update this to use this by default
 
 private def writeToNewIndex(

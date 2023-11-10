@@ -1,5 +1,5 @@
 import cats.effect.*
-import model.{DatabaseException, DatabaseMetadata}
+import model.DatabaseException
 import shared.createDatabaseEngine
 import SimpleKeyValueStore.*
 
@@ -26,7 +26,7 @@ def main(args: Array[String]): Unit = {
   }
 }
 
-private def doAction(input: List[String], initialMd: DatabaseMetadata): DatabaseMetadata = {
+private def doAction(input: List[String], initialMd: SimpleDatabaseMetadata): SimpleDatabaseMetadata = {
   var dbToReturn = initialMd
   input match {
     case "s" :: keyToStore :: valueToStore :: nil =>
@@ -42,13 +42,13 @@ private def doAction(input: List[String], initialMd: DatabaseMetadata): Database
   dbToReturn
 }
 
-private def store(keyToStore: String, valueToStore: String, metadata: DatabaseMetadata): Either[String, (String, DatabaseMetadata)] =
+private def store(keyToStore: String, valueToStore: String, metadata: SimpleDatabaseMetadata): Either[String, (String, SimpleDatabaseMetadata)] =
   storeKeyValue(keyToStore, valueToStore, metadata).unsafeRunSync() match {
     case Right(md) => Right("Successfully stored", md)
     case Left(err) => Left(err.message)
   }
 
-private def getKey(keyToRead: String, md: DatabaseMetadata): String =
+private def getKey(keyToRead: String, md: SimpleDatabaseMetadata): String =
   getFromKey(keyToRead, md).unsafeRunSync() match {
     case Right(s) => s
     case Left(e)  => e.message

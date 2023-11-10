@@ -1,6 +1,6 @@
 import cats.data.EitherT
 import cats.effect.unsafe.implicits.global
-import model.{DatabaseMetadata, LogFile, ReadTooSmallValue}
+import model.{LogFile, ReadTooSmallValue}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -25,7 +25,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   private val newLogFilePath            = Paths.get(s"./src/test/resources/DatabaseEngineIntegrationTestDatabase/afterCompressLogFile.txt")
 
   "write" should "update the log file when it is empty" in {
-    val databaseEngine = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())), 1000L)
+    val databaseEngine = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())), 1000L)
 
     storeKeyValue(myKey, myValue, databaseEngine).unsafeRunSync() shouldBe
       Right(databaseEngine.withUpdatedLogFileIndex(Map(myKey -> 0)))
@@ -36,7 +36,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     val existingData = "someKeyAndValue"
     Files.writeString(existingLogFilePath, existingData)
     val indexMap         = Map("otherKey" -> 0.toLong)
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, indexMap)), 1000L)
+    val databaseMetadata = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, indexMap)), 1000L)
 
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync() shouldBe
       Right(databaseMetadata.withUpdatedLogFileIndex(indexMap.updated(myKey, existingData.length)))
@@ -47,7 +47,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   it should "overwrite an existing entry when writing the same key to the same log file" in {
     Files.writeString(existingLogFilePath, keyValueString)
     val indexMap         = Map(myKey -> 0.toLong)
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, indexMap)), 1000L)
+    val databaseMetadata = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, indexMap)), 1000L)
 
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync() shouldBe
       Right(databaseMetadata.withUpdatedLogFileIndex(Map(myKey -> keyValueString.length)))
@@ -58,7 +58,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     val existingData = "a" * 999
     Files.writeString(secondExistingLogFilePath, existingData)
     val existingLogFiles   = List(LogFile(secondExistingLogFilePath, Map()), LogFile(existingLogFilePath, Map()))
-    val databaseMetadata   = DatabaseMetadata(existingDatabasePath, existingLogFiles, fileLimit.toLong)
+    val databaseMetadata   = SimpleDatabaseMetadata(existingDatabasePath, existingLogFiles, fileLimit.toLong)
     val expectedNewLogFile = LogFile(thirdLogFilePath, Map(myKey -> 0))
 
     storeKeyValue(myKey, myValue, databaseMetadata).unsafeRunSync()
@@ -68,7 +68,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   }
 
   "getFromKey" should "store a key value and retrieve it" in {
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())), 1000L)
+    val databaseMetadata = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map())), 1000L)
     val secondKey        = "anotherKey"
     val secondValue      = "anotherValue"
     val result = (for {
@@ -84,7 +84,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   it should "retrieve a key when it is not found in the latest index" in {
     Files.writeString(secondExistingLogFilePath, keyValueString)
-    val databaseMetadata = DatabaseMetadata(
+    val databaseMetadata = SimpleDatabaseMetadata(
       existingDatabasePath,
       List(
         LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
@@ -100,7 +100,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     Files.writeString(existingLogFilePath, keyValueString)
     val otherValue = myValue.reverse
     Files.writeString(secondExistingLogFilePath, keySize + myKey + valueSize + otherValue)
-    val databaseMetadata = DatabaseMetadata(
+    val databaseMetadata = SimpleDatabaseMetadata(
       existingDatabasePath,
       List(
         LogFile(secondExistingLogFilePath, Map(myKey -> 0)),
@@ -114,7 +114,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   it should "return a left with error message if the key is not in any index" in {
     Files.writeString(secondExistingLogFilePath, keyValueString)
-    val databaseMetadata = DatabaseMetadata(
+    val databaseMetadata = SimpleDatabaseMetadata(
       existingDatabasePath,
       List(
         LogFile(existingLogFilePath, Map("anotherKey" -> 0)),
@@ -133,7 +133,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   it should "return a left with error message when the index is incorrect" in {
     Files.writeString(existingLogFilePath, keyValueString)
     val differentKey     = "anotherKey"
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(differentKey -> 0))), 1000L)
+    val databaseMetadata = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(differentKey -> 0))), 1000L)
 
     getFromKey(differentKey, databaseMetadata).unsafeRunSync().getLeft
       .message shouldBe
@@ -143,7 +143,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
   it should "return a left with error message when the stored data is corrupted" in {
     val notTheCorrectValue = "a"
     Files.writeString(existingLogFilePath, keySize + myKey + valueSize + notTheCorrectValue)
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(myKey -> 0))), 1000L)
+    val databaseMetadata = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile(existingLogFilePath, Map(myKey -> 0))), 1000L)
 
     getFromKey(myKey, databaseMetadata).unsafeRunSync().getLeft
       .message shouldBe
@@ -169,7 +169,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
       )
     )
     val newerLogFile     = LogFile(secondExistingLogFilePath, Map("firstKey" -> 0, "fourthKey" -> firstKeyStringUpdated.length))
-    val databaseMetadata = DatabaseMetadata(existingDatabasePath, List(LogFile.empty(thirdLogFilePath), newerLogFile, olderLogFile), 1000L)
+    val databaseMetadata = SimpleDatabaseMetadata(existingDatabasePath, List(LogFile.empty(thirdLogFilePath), newerLogFile, olderLogFile), 1000L)
 
     val updatedMetadata = compress(databaseMetadata, md => newLogFilePath).unsafeRunSync().getRight
 
@@ -194,7 +194,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
 
   it should "return an error if there are less than three log files" in {
     val databaseMetadata =
-      DatabaseMetadata(existingDatabasePath, List(LogFile.empty(existingLogFilePath), LogFile.empty(secondExistingLogFilePath)), 1000L)
+      SimpleDatabaseMetadata(existingDatabasePath, List(LogFile.empty(existingLogFilePath), LogFile.empty(secondExistingLogFilePath)), 1000L)
 
     compress(databaseMetadata).unsafeRunSync().getLeft.message shouldBe
       s"There were not enough log files to compress: need at least two dormant log files " +
@@ -207,7 +207,7 @@ class DatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Befor
     writeToFile(malformedKey, existingLogFilePath).unsafeRunSync()
     val indexWithMalformedKey = LogFile(existingLogFilePath, Map(myKey -> 0))
     val logFiles              = List(LogFile.empty(thirdLogFilePath), LogFile.empty(secondExistingLogFilePath), indexWithMalformedKey)
-    val databaseMetadata      = DatabaseMetadata(existingDatabasePath, logFiles, 1000L)
+    val databaseMetadata      = SimpleDatabaseMetadata(existingDatabasePath, logFiles, 1000L)
 
     compress(databaseMetadata).unsafeRunSync().getLeft.message shouldBe "Expected a string of size 7 but got string of size 1"
   }

@@ -1,8 +1,9 @@
 package shared
 
+import SimpleKeyValueStore.SimpleDatabaseMetadata
 import cats.data.EitherT
 import cats.effect.IO
-import model.{BinaryStringLengthExceeded, DatabaseException, DatabaseMetadata, LogFile, ReadTooSmallValue, UnparseableBinaryString}
+import model.{BinaryStringLengthExceeded, DatabaseException, LogFile, ReadTooSmallValue, UnparseableBinaryString}
 
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -10,17 +11,17 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 import scala.util.{Failure, Success, Try}
 
-def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String, logFileSizeLimit: Long): IO[DatabaseMetadata] =
+def createDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String, logFileSizeLimit: Long): IO[SimpleDatabaseMetadata] =
   val directoryPathString = locationPrefix + "/" + name
 
   for {
     directoryPath <- tryIO(Paths.get(directoryPathString))
-    initialMetadata = DatabaseMetadata(directoryPath, List(), logFileSizeLimit)
+    initialMetadata = SimpleDatabaseMetadata(directoryPath, List(), logFileSizeLimit)
     _               <- tryIO(Files.createDirectory(directoryPath))
     updatedMetadata <- createNewLogFile(initialMetadata)
   } yield updatedMetadata
 
-def createNewLogFile(databaseMetadata: DatabaseMetadata): IO[DatabaseMetadata] =
+def createNewLogFile(databaseMetadata: SimpleDatabaseMetadata): IO[SimpleDatabaseMetadata] =
   val name = s"logFile${databaseMetadata.logFiles.length + 1}.txt"
   for {
     filePath <- tryIO(Paths.get(databaseMetadata.path.toString + "/" + name))
