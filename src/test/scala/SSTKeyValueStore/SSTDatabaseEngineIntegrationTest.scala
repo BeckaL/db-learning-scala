@@ -39,6 +39,16 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     Files.readString(secondLogFile) should startWith(getStringToWrite("1", myValue).getRight)
   }
 
+  it should "not compress if the existing memtable is over the size limit but the key is already in the memtable" in {
+    val memtable      = TreeMap.from((1 to 101).map(_.toString).map(key => key -> "anotherValue").toMap)
+    val startMetadata = SSTDatabaseMetadata(databasePath, memtable, List())
+
+    val result = write(startMetadata, "1", myValue, dbMetadata => secondLogFile).unsafeRunSync().getRight
+    Files.exists(secondLogFile) shouldBe false
+    result.memTable shouldBe memtable.updated("1", myValue)
+    result.logFiles shouldBe List()
+  }
+
   "read" should "read from the map" in {
     val memTable = TreeMap(myKey -> myValue)
     read(SSTDatabaseMetadata(databasePath, memTable, List()), myKey).unsafeRunSync() shouldBe Right(myValue)

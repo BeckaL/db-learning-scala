@@ -16,7 +16,7 @@ def write(
   value: String,
   fileNameUpdater: SSTDatabaseMetadata => Path = newLogName
 ): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
-  if (metadata.memTable.size > 100) {
+  if (metadata.memTable.size > 100 && !metadata.memTable.contains(key)) {
     compressAndWriteToSSTFile(metadata, fileNameUpdater)
       .map(_.map(metadataAfterCompress => metadataAfterCompress.withUpdatedKeyValue(key, value)))
   } else {
