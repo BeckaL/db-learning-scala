@@ -119,7 +119,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   "compressAndWriteMemTable" should "write the memtable to an ordered file" in {
     val m        = TreeMap.from(ReadingFixture.allKeysAndValuesOrdered)
     val metadata = SSTDatabaseMetadata(databasePath, m, List())
-    val result   = compressAndWriteToSSTFile(metadata, metadata => secondLogFile).unsafeRunSync()
+    val result   = compressMemtableAndWriteToSSTFile(metadata, metadata => secondLogFile).unsafeRunSync()
 
     // Currently, we just compress every ten values, rather than care about the size of the compressed block
     val expectedLogIndex: Map[String, Long] =

@@ -17,7 +17,7 @@ def write(
   fileNameUpdater: SSTDatabaseMetadata => Path = newLogName
 ): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
   if (metadata.memTable.size > 100 && !metadata.memTable.contains(key))
-    compressAndWriteToSSTFile(metadata, fileNameUpdater)
+    compressMemtableAndWriteToSSTFile(metadata, fileNameUpdater)
       .map(_.map(metadataAfterCompress => metadataAfterCompress.withUpdatedKeyValue(key, value)))
   else
     IO.pure(Right(metadata.withUpdatedKeyValue(key, value)))
@@ -28,7 +28,7 @@ def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseExceptio
     case None        => attemptToReadFromLogFiles(metadata.logFiles, key)
   }
 
-def compressAndWriteToSSTFile(
+def compressMemtableAndWriteToSSTFile(
   metadata: SSTDatabaseMetadata,
   newFileNamer: SSTDatabaseMetadata => Path
 ): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
