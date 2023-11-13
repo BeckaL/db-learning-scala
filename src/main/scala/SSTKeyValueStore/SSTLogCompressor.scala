@@ -62,7 +62,9 @@ private def selectKeyValueAndDecideOffsetResets(
 ): (KeyValuePair, Boolean, Boolean) =
   (maybeNewerKeyValue, maybeOlderKeyValue) match {
     case (Some(newerKeyValue), Some(olderKeyValue)) =>
-      if (newerKeyValue.k < olderKeyValue.v) {
+      if (newerKeyValue.k == olderKeyValue.k) {
+        (newerKeyValue, false, false)
+      } else if (newerKeyValue.k < olderKeyValue.v) {
         (newerKeyValue, false, true)
       } else {
         (olderKeyValue, true, false)

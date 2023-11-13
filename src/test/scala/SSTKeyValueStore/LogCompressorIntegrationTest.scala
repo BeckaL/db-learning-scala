@@ -41,7 +41,6 @@ class LogCompressorIntegrationTest extends AnyFlatSpec with Matchers with Before
   }
 
   it should "merge two files when some of the keys are overlapping, picking the newer in this case" in {
-    pending
     val newerLogFileValues = List("a", "c", "e", "f", "h")
     val olderLogFileValues = List("a", "b", "d", "f", "g")
 
