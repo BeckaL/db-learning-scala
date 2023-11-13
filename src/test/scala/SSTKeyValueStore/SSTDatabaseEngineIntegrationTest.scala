@@ -15,6 +15,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   private val myValue         = "myValue"
   private val databasePath    = Paths.get("./src/test/resources/SSTDatabaseEngineIntegrationTest")
   private val existingLogFile = Paths.get(databasePath.toString + "/" + "logFile1.txt")
+  private val secondLogFile = Paths.get(databasePath.toString + "/" + "logFile2.txt")
   "write" should "write to a thing" in {
     write(SSTDatabaseMetadata(TreeMap(), List()), myKey, myValue) shouldBe TreeMap(myKey -> myValue)
   }
@@ -28,6 +29,14 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     Files.writeString(existingLogFile, getStringToWrite(myKey, myValue).getOrElse(throw new RuntimeException("oops")))
     val logFile  = LogFile(existingLogFile, Map(myKey -> 0))
     val metadata = SSTDatabaseMetadata(TreeMap("anotherKey" -> "anotherValue"), List(logFile))
+
+    read(metadata, myKey).unsafeRunSync() shouldBe Right(myValue)
+  }
+
+  it should "read from a logfile when the entry is directly in an older index" in {
+    Files.writeString(existingLogFile, getStringToWrite(myKey, myValue).getOrElse(throw new RuntimeException("oops")))
+    val logFile = LogFile(existingLogFile, Map(myKey -> 0))
+    val metadata = SSTDatabaseMetadata(TreeMap("anotherKey" -> "anotherValue"), List(LogFile.empty(secondLogFile), logFile))
 
     read(metadata, myKey).unsafeRunSync() shouldBe Right(myValue)
   }
