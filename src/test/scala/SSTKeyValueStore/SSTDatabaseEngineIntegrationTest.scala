@@ -18,13 +18,13 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   private val secondLogFile   = Paths.get(databasePath.toString + "/" + "logFile2.txt")
   "write" should "write to a memtable" in {
     val startMetadata = SSTDatabaseMetadata(databasePath, TreeMap(), List())
-    write(startMetadata, myKey, myValue).unsafeRunSync().getRight shouldBe
+    write(startMetadata, myKey, myValue).unsafeRunSync() shouldBe
       startMetadata.copy(memTable = TreeMap(myKey -> myValue))
   }
 
   it should "update an existing memtable value" in {
     val startMetadata = SSTDatabaseMetadata(databasePath, TreeMap(myKey -> "otherValue"), List())
-    write(startMetadata, myKey, myValue).unsafeRunSync().getRight shouldBe
+    write(startMetadata, myKey, myValue).unsafeRunSync() shouldBe
       startMetadata.copy(memTable = TreeMap(myKey -> myValue))
   }
 
@@ -32,7 +32,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     val memtable      = TreeMap.from((1 to 101).map(_.toString).map(key => key -> myValue).toMap)
     val startMetadata = SSTDatabaseMetadata(databasePath, memtable, List())
 
-    val result = write(startMetadata, myKey, myValue, dbMetadata => secondLogFile).unsafeRunSync().getRight
+    val result = write(startMetadata, myKey, myValue, dbMetadata => secondLogFile).unsafeRunSync()
     result.memTable shouldBe TreeMap(myKey -> myValue)
     result.logFiles.map(_.path) shouldBe List(secondLogFile)
 
@@ -43,7 +43,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     val memtable      = TreeMap.from((1 to 101).map(_.toString).map(key => key -> "anotherValue").toMap)
     val startMetadata = SSTDatabaseMetadata(databasePath, memtable, List())
 
-    val result = write(startMetadata, "1", myValue, dbMetadata => secondLogFile).unsafeRunSync().getRight
+    val result = write(startMetadata, "1", myValue, dbMetadata => secondLogFile).unsafeRunSync()
     Files.exists(secondLogFile) shouldBe false
     result.memTable shouldBe memtable.updated("1", myValue)
     result.logFiles shouldBe List()
@@ -126,7 +126,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
       Map("aaaaa" -> 0, "kkkkk" -> ReadingFixture.getOffsetOf("k"), "uuuuu" -> ReadingFixture.getOffsetOf("u"))
 
     Files.readString(secondLogFile) shouldBe ReadingFixture.allKeysAndValuesOrderedString.mkString("")
-    result shouldBe Right(SSTDatabaseMetadata(databasePath, TreeMap(), List(LogFile(secondLogFile, expectedLogIndex))))
+    result shouldBe SSTDatabaseMetadata(databasePath, TreeMap(), List(LogFile(secondLogFile, expectedLogIndex)))
   }
 
   override def afterEach(): Unit = {

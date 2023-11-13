@@ -4,7 +4,7 @@ import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
 import model.{DatabaseException, KeyNotFoundInIndices, LogFile}
-import shared.{createNewFile, getFileSize, getStringToWrite, readFromFile, scanFileForKey, writeToFile}
+import shared.{createNewFile, getFileSize, getStringToWrite, getStringToWriteUnsafe, readFromFile, scanFileForKey, writeMemtableToFile, writeToFile}
 
 import java.nio.file.{Path, Paths}
 import java.util.UUID
@@ -15,12 +15,12 @@ def write(
   key: String,
   value: String,
   fileNameUpdater: SSTDatabaseMetadata => Path = newLogName
-): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
+): IO[SSTDatabaseMetadata] =
   if (metadata.memTable.size > 100 && !metadata.memTable.contains(key))
     compressMemtableAndWriteToSSTFile(metadata, fileNameUpdater)
-      .map(_.map(metadataAfterCompress => metadataAfterCompress.withUpdatedKeyValue(key, value)))
+      .map(metadataAfterCompress => metadataAfterCompress.withUpdatedKeyValue(key, value))
   else
-    IO.pure(Right(metadata.withUpdatedKeyValue(key, value)))
+    IO.pure(metadata.withUpdatedKeyValue(key, value))
 
 def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseException, String]] =
   metadata.memTable.get(key) match {
@@ -31,32 +31,12 @@ def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseExceptio
 def compressMemtableAndWriteToSSTFile(
   metadata: SSTDatabaseMetadata,
   newFileNamer: SSTDatabaseMetadata => Path
-): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
-  (for {
-    newFilePath                   <- EitherT.right[DatabaseException](createNewFile(newFileNamer(metadata)))
-    memtableListWithStringToWrite <- EitherT.fromEither[IO](getKeyValueAndStringToWrite(metadata))
-    index                         <- EitherT.right(writeMemtableToFile(memtableListWithStringToWrite, newFilePath))
+): IO[SSTDatabaseMetadata] =
+  for {
+    newFilePath <- createNewFile(newFileNamer(metadata))
+    index       <- writeMemtableToFile(metadata.memTable.toList, newFilePath)
     newLogFile = LogFile(newFilePath, index)
-  } yield SSTDatabaseMetadata(metadata.path, TreeMap(), newLogFile +: metadata.logFiles)).value
-
-private def getKeyValueAndStringToWrite(metadata: SSTDatabaseMetadata): Either[DatabaseException, List[(String, String, String)]] =
-  metadata.memTable.toList.traverse((key, value) => getStringToWrite(key, value).map(s => (key, value, s)))
-
-private def writeMemtableToFile(
-  memtableList: Seq[(String, String, String)],
-  path: Path,
-  currentIndex: Map[String, Long] = Map(),
-  countOfValuesWritten: Int = 0
-): IO[Map[String, Long]] =
-  memtableList match {
-    case (nextKey, nextValue, stringToWrite) :: remainingKeysAndValues =>
-      writeToFile(stringToWrite, location = path).map(offset =>
-        if (countOfValuesWritten % 10 == 0) currentIndex.updated(nextKey, offset) else currentIndex
-      ).flatMap(updatedIndex =>
-        writeMemtableToFile(remainingKeysAndValues, path, updatedIndex, countOfValuesWritten + 1)
-      )
-    case Nil => IO.pure(currentIndex)
-  }
+  } yield SSTDatabaseMetadata(metadata.path, TreeMap(), newLogFile +: metadata.logFiles)
 
 private def attemptToReadFromLogFiles(logFiles: List[LogFile], key: String): IO[Either[DatabaseException, String]] =
   logFiles match

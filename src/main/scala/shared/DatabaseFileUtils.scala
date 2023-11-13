@@ -3,7 +3,7 @@ package shared
 import SimpleKeyValueStore.SimpleDatabaseMetadata
 import cats.data.EitherT
 import cats.effect.IO
-import model.{BinaryStringLengthExceeded, DatabaseException, KeyNotFoundInIndices, LogFile, ReadTooSmallValue, UnparseableBinaryString}
+import model.{BinaryStringLengthExceeded, DatabaseException, KeyNotFoundInIndices, KeyValuePair, LogFile, ReadTooSmallValue, UnparseableBinaryString}
 
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -56,13 +56,19 @@ def readFromFile(offset: Long, location: Path): IO[Either[DatabaseException, (St
 private def readFromFileReturningPosition(offset: Long, location: Path): IO[Either[DatabaseException, (String, String, Long)]] = {
   (for {
     fileChannel <- EitherT.right(tryIO(FileChannel.open(location).position(offset)))
-    keySize     <- readBinaryIntegerFromFile(fileChannel)
-    key         <- EitherT.apply(tryIO(readChunkFromFile(keySize, fileChannel)))
-    valueSize   <- readBinaryIntegerFromFile(fileChannel)
-    value       <- EitherT.apply(tryIO(readChunkFromFile(valueSize, fileChannel)))
+    keyValue    <- readKeyValueFromFileChannel(fileChannel)
     position = fileChannel.position()
     _        = fileChannel.close()
-  } yield (key, value, position)).value
+  } yield (keyValue.k, keyValue.v, position)).value
+}
+
+def readKeyValueFromFileChannel(positionedFileChannel: FileChannel): EitherT[IO, DatabaseException, KeyValuePair] = {
+  for {
+    keySize   <- readBinaryIntegerFromFile(positionedFileChannel)
+    key       <- EitherT.apply(tryIO(readChunkFromFile(keySize, positionedFileChannel)))
+    valueSize <- readBinaryIntegerFromFile(positionedFileChannel)
+    value     <- EitherT.apply(tryIO(readChunkFromFile(valueSize, positionedFileChannel)))
+  } yield KeyValuePair(key, value)
 }
 
 def scanFileForKey(startOffset: Long, until: Long, location: Path, keyToFind: String): IO[Either[DatabaseException, String]] =
@@ -105,3 +111,26 @@ private def toPaddedBinaryString(i: Int): Either[DatabaseException, String] =
     Left(BinaryStringLengthExceeded(binString.length))
   else
     Right("0" * (8 - binString.length) + binString)
+
+private def toPaddedBinaryStringUnsafe(i: Int): String =
+  val binString = i.toBinaryString
+  "0" * (8 - binString.length) + binString
+
+def getStringToWriteUnsafe(key: String, value: String): String =
+  toPaddedBinaryStringUnsafe(key.length) + key + toPaddedBinaryStringUnsafe(value.length) + value
+
+def writeMemtableToFile(
+  memTableList: List[(String, String)],
+  path: Path,
+  currentIndex: Map[String, Long] = Map(),
+  countOfValuesWritten: Int = 0
+): IO[Map[String, Long]] =
+  memTableList match {
+    case (nextKey, nextValue) :: remainingKeysAndValues =>
+      writeToFile(getStringToWriteUnsafe(nextKey, nextValue), location = path).map(offset =>
+        if (countOfValuesWritten % 10 == 0) currentIndex.updated(nextKey, offset) else currentIndex
+      ).flatMap(updatedIndex =>
+        writeMemtableToFile(remainingKeysAndValues, path, updatedIndex, countOfValuesWritten + 1)
+      )
+    case Nil => IO.pure(currentIndex)
+  }
