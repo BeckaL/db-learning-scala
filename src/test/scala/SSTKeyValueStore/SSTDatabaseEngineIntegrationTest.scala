@@ -42,7 +42,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   }
 
   it should "read from a logfile when the entry is not directly in the index" in {
-    Files.writeString(existingLogFile, ReadingFixture.allKeysAndValues.mkString(""))
+    Files.writeString(existingLogFile, ReadingFixture.allKeysAndValuesOrderedString.mkString(""))
 
     val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> ReadingFixture.getOffsetOf("h"), "t" -> ReadingFixture.getOffsetOf("t"))
 
@@ -56,7 +56,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   }
 
   it should "read from a logfile when the entry is not directly in the memtable and is after the last key in the logfile index" in {
-    Files.writeString(existingLogFile, ReadingFixture.allKeysAndValues.mkString(""))
+    Files.writeString(existingLogFile, ReadingFixture.allKeysAndValuesOrderedString.mkString(""))
 
     val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> ReadingFixture.getOffsetOf("h"), "t" -> ReadingFixture.getOffsetOf("t"))
 
@@ -70,9 +70,9 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   }
 
   it should "bubble up a lower level error" in {
-    val firstKeyValue = getStringToWrite("aaa", "aaaaa").getRight
+    val firstKeyValue     = getStringToWrite("aaa", "aaaaa").getRight
     val malformedKeyValue = "00000010" + "a" + "00000001" + "a"
-    val myKeyValue = getStringToWrite(myKey, myValue).getRight
+    val myKeyValue        = getStringToWrite(myKey, myValue).getRight
 
     val index: Map[String, Long] = Map("a" -> 0)
 
@@ -87,15 +87,31 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     read(SSTDatabaseMetadata(TreeMap(), List()), myKey).unsafeRunSync() shouldBe Left(KeyNotFoundInIndices(myKey))
   }
 
+  "compressAndWriteMemTable" should "write the memtable to an ordered file" in {
+    val m        = TreeMap.from(ReadingFixture.allKeysAndValuesOrdered)
+    val metadata = SSTDatabaseMetadata(m, List())
+    val result   = compressAndWriteToSSTFile(metadata, metadata => secondLogFile).unsafeRunSync()
+
+    // Currently, we just compress every ten values, rather than care about the size of the compressed block
+    val expectedLogIndex: Map[String, Long] =
+      Map("aaaaa" -> 0, "kkkkk" -> ReadingFixture.getOffsetOf("k"), "uuuuu" -> ReadingFixture.getOffsetOf("u"))
+
+    Files.readString(secondLogFile) shouldBe ReadingFixture.allKeysAndValuesOrderedString.mkString("")
+    result shouldBe Right(SSTDatabaseMetadata(TreeMap(), List(LogFile(secondLogFile, expectedLogIndex))))
+  }
+
   override def afterEach(): Unit = {
     Files.writeString(existingLogFile, "")
+    Files.deleteIfExists(secondLogFile)
   }
 
   object ReadingFixture {
     val keySize   = 5
     val valueSize = 10
-    val allKeysAndValues = ('a' to 'z').toList
-      .map(char => getStringToWrite(char.toString * keySize, char.toString * valueSize).getRight)
+    val allKeysAndValuesOrdered = ('a' to 'z').toList
+      .map(char => (char.toString * keySize, char.toString * valueSize))
+    val allKeysAndValuesOrderedString =
+      allKeysAndValuesOrdered.map((key, value) => getStringToWrite(key, value).getRight)
 
     def getOffsetOf(string: String) = {
       val keyValueStringLength = keySize + valueSize + 16
