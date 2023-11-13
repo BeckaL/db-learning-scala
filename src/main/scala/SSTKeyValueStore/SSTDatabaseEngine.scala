@@ -2,7 +2,7 @@ package SSTKeyValueStore
 
 import cats.effect.IO
 import model.{DatabaseException, KeyNotFoundInIndices, LogFile}
-import shared.{readFromFile, scanFileForKey}
+import shared.{getFileSize, readFromFile, scanFileForKey}
 
 import scala.collection.immutable.TreeMap
 
@@ -21,15 +21,21 @@ private def attemptToReadFromLogFiles(logFiles: List[LogFile], key: String): IO[
         case Some(offset) => readFromFile(offset, firstLogFile.path).map(_.map(_._2))
         case None =>
           if (firstLogFile.index.nonEmpty)
-            findOffsetToScan(firstLogFile.index, key) match
-              case (startOffset, Some(endOffset)) =>
-                scanFileForKey(startOffset, endOffset, firstLogFile.path, key).flatMap {
-                  case Right(value)                  => IO.pure(Right(value))
-                  case Left(KeyNotFoundInIndices(_)) => attemptToReadFromLogFiles(others, key)
-                  case Left(otherException)          => ???
-                }
-              case _ => ???
-          else attemptToReadFromLogFiles(others, key)
+            val (startOffset, maybeEndOffset) = findOffsetToScan(firstLogFile.index, key)
+            val endOffsetIO = maybeEndOffset match {
+              case None         => getFileSize(firstLogFile.path)
+              case Some(offset) => IO.pure(offset)
+            }
+            endOffsetIO.flatMap(endOffset =>
+              scanFileForKey(startOffset, endOffset, firstLogFile.path, key).flatMap {
+                case Right(value)                  => IO.pure(Right(value))
+                case Left(KeyNotFoundInIndices(_)) => attemptToReadFromLogFiles(others, key)
+                case Left(otherException)          => ???
+              }
+            )
+          else {
+            attemptToReadFromLogFiles(others, key)
+          }
     case Nil => IO.pure(Left(KeyNotFoundInIndices(key)))
 
 private def findOffsetToScan(index: Map[String, Long], keyToSearchFor: String): (Long, Option[Long]) =

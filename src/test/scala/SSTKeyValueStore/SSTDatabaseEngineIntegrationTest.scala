@@ -42,27 +42,29 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   }
 
   it should "read from a logfile when the entry is not directly in the index" in {
-    val keySize   = 5
-    val valueSize = 10
-    val toWrite = ('a' to 'z').toList
-      .map(char => getStringToWrite(char.toString * keySize, char.toString * valueSize).getRight)
-    Files.writeString(existingLogFile, toWrite.mkString(""))
+    Files.writeString(existingLogFile, MyFixture.allKeysAndValues.mkString(""))
 
-    def getOffsetOf(string: String) = {
-      val keyValueStringLength = keySize + valueSize + 16
-      ('a' to 'z').toList.indexOf(string.head) * keyValueStringLength
-    }
+    val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> MyFixture.getOffsetOf("h"), "t" -> MyFixture.getOffsetOf("t"))
 
-    val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> getOffsetOf("h"), "t" -> getOffsetOf("t"))
-    println(index)
-    println(getOffsetOf("b"))
-
-    val logFile             = LogFile(existingLogFile, index)
     val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
-    val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(logFile))
+    val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
 
-    val keyToSearchFor = "r" * 5
-    val expectedValue  = "r" * 10
+    val keyToSearchFor = "r" * MyFixture.keySize
+    val expectedValue  = "r" * MyFixture.valueSize
+
+    read(sstDatabaseMetadata, keyToSearchFor).unsafeRunSync() shouldBe Right(expectedValue)
+  }
+
+  it should "read from a logfile when the entry is not directly in the memtable and is after the last key in the logfile index" in {
+    Files.writeString(existingLogFile, MyFixture.allKeysAndValues.mkString(""))
+
+    val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> MyFixture.getOffsetOf("h"), "t" -> MyFixture.getOffsetOf("t"))
+
+    val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
+    val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
+
+    val keyToSearchFor = "v" * MyFixture.keySize
+    val expectedValue  = "v" * MyFixture.valueSize
 
     read(sstDatabaseMetadata, keyToSearchFor).unsafeRunSync() shouldBe Right(expectedValue)
   }
@@ -73,6 +75,18 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
 
   override def afterEach(): Unit = {
     Files.writeString(existingLogFile, "")
+  }
+
+  object MyFixture {
+    val keySize   = 5
+    val valueSize = 10
+    val allKeysAndValues = ('a' to 'z').toList
+      .map(char => getStringToWrite(char.toString * keySize, char.toString * valueSize).getRight)
+
+    def getOffsetOf(string: String) = {
+      val keyValueStringLength = keySize + valueSize + 16
+      ('a' to 'z').toList.indexOf(string.head) * keyValueStringLength
+    }
   }
 
   implicit class EitherOps[A, B](e: Either[A, B]) {

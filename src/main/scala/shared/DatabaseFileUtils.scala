@@ -73,6 +73,8 @@ def scanFileForKey(startOffset: Long, until: Long, location: Path, keyToFind: St
     case Left(databaseException)                            => IO.pure(Left(databaseException))
   }
 
+def getFileSize(location: Path): IO[Long] = tryIO(Files.size(location))
+
 private def readBinaryIntegerFromFile(fileChannel: FileChannel): EitherT[IO, DatabaseException, Integer] =
   for {
     binaryString <- EitherT.apply(tryIO(readChunkFromFile(8, fileChannel)))
