@@ -16,19 +16,38 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   private val databasePath    = Paths.get("./src/test/resources/SSTDatabaseEngineIntegrationTest")
   private val existingLogFile = Paths.get(databasePath.toString + "/" + "logFile1.txt")
   private val secondLogFile   = Paths.get(databasePath.toString + "/" + "logFile2.txt")
-  "write" should "write to a thing" in {
-    write(SSTDatabaseMetadata(TreeMap(), List()), myKey, myValue) shouldBe TreeMap(myKey -> myValue)
+  "write" should "write to a memtable" in {
+    val startMetadata = SSTDatabaseMetadata(databasePath, TreeMap(), List())
+    write(startMetadata, myKey, myValue).unsafeRunSync().getRight shouldBe
+      startMetadata.copy(memTable = TreeMap(myKey -> myValue))
+  }
+
+  it should "update an existing memtable value" in {
+    val startMetadata = SSTDatabaseMetadata(databasePath, TreeMap(myKey -> "otherValue"), List())
+    write(startMetadata, myKey, myValue).unsafeRunSync().getRight shouldBe
+      startMetadata.copy(memTable = TreeMap(myKey -> myValue))
+  }
+
+  it should "compress if the existing memtable is over the size limit, write to file and then store in the new memtable" in {
+    val memtable      = TreeMap.from((1 to 101).map(_.toString).map(key => key -> myValue).toMap)
+    val startMetadata = SSTDatabaseMetadata(databasePath, memtable, List())
+
+    val result = write(startMetadata, myKey, myValue, dbMetadata => secondLogFile).unsafeRunSync().getRight
+    result.memTable shouldBe TreeMap(myKey -> myValue)
+    result.logFiles.map(_.path) shouldBe List(secondLogFile)
+
+    Files.readString(secondLogFile) should startWith(getStringToWrite("1", myValue).getRight)
   }
 
   "read" should "read from the map" in {
     val memTable = TreeMap(myKey -> myValue)
-    read(SSTDatabaseMetadata(memTable, List()), myKey).unsafeRunSync() shouldBe Right(myValue)
+    read(SSTDatabaseMetadata(databasePath, memTable, List()), myKey).unsafeRunSync() shouldBe Right(myValue)
   }
 
   it should "read from a logfile when the entry is directly in the index" in {
     Files.writeString(existingLogFile, getStringToWrite(myKey, myValue).getOrElse(throw new RuntimeException("oops")))
     val logFile  = LogFile(existingLogFile, Map(myKey -> 0))
-    val metadata = SSTDatabaseMetadata(TreeMap("anotherKey" -> "anotherValue"), List(logFile))
+    val metadata = SSTDatabaseMetadata(databasePath, TreeMap("anotherKey" -> "anotherValue"), List(logFile))
 
     read(metadata, myKey).unsafeRunSync() shouldBe Right(myValue)
   }
@@ -36,7 +55,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   it should "read from a logfile when the entry is directly in an older index" in {
     Files.writeString(existingLogFile, getStringToWrite(myKey, myValue).getOrElse(throw new RuntimeException("oops")))
     val logFile  = LogFile(existingLogFile, Map(myKey -> 0))
-    val metadata = SSTDatabaseMetadata(TreeMap("anotherKey" -> "anotherValue"), List(LogFile.empty(secondLogFile), logFile))
+    val metadata = SSTDatabaseMetadata(databasePath, TreeMap("anotherKey" -> "anotherValue"), List(LogFile.empty(secondLogFile), logFile))
 
     read(metadata, myKey).unsafeRunSync() shouldBe Right(myValue)
   }
@@ -47,7 +66,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> ReadingFixture.getOffsetOf("h"), "t" -> ReadingFixture.getOffsetOf("t"))
 
     val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
-    val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
+    val sstDatabaseMetadata = SSTDatabaseMetadata(databasePath, inMemoryIndex, List(LogFile(existingLogFile, index)))
 
     val keyToSearchFor = "r" * ReadingFixture.keySize
     val expectedValue  = "r" * ReadingFixture.valueSize
@@ -61,7 +80,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> ReadingFixture.getOffsetOf("h"), "t" -> ReadingFixture.getOffsetOf("t"))
 
     val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
-    val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
+    val sstDatabaseMetadata = SSTDatabaseMetadata(databasePath, inMemoryIndex, List(LogFile(existingLogFile, index)))
 
     val keyToSearchFor = "v" * ReadingFixture.keySize
     val expectedValue  = "v" * ReadingFixture.valueSize
@@ -78,18 +97,18 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
 
     Files.writeString(existingLogFile, firstKeyValue + malformedKeyValue + myKeyValue)
     val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
-    val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
+    val sstDatabaseMetadata = SSTDatabaseMetadata(databasePath, inMemoryIndex, List(LogFile(existingLogFile, index)))
 
     read(sstDatabaseMetadata, myKey).unsafeRunSync().getLeft shouldBe a[UnparseableBinaryString]
   }
 
   it should "return a left when the value is not found in the memtable and there are no logs" in {
-    read(SSTDatabaseMetadata(TreeMap(), List()), myKey).unsafeRunSync() shouldBe Left(KeyNotFoundInIndices(myKey))
+    read(SSTDatabaseMetadata(databasePath, TreeMap(), List()), myKey).unsafeRunSync() shouldBe Left(KeyNotFoundInIndices(myKey))
   }
 
   "compressAndWriteMemTable" should "write the memtable to an ordered file" in {
     val m        = TreeMap.from(ReadingFixture.allKeysAndValuesOrdered)
-    val metadata = SSTDatabaseMetadata(m, List())
+    val metadata = SSTDatabaseMetadata(databasePath, m, List())
     val result   = compressAndWriteToSSTFile(metadata, metadata => secondLogFile).unsafeRunSync()
 
     // Currently, we just compress every ten values, rather than care about the size of the compressed block
@@ -97,7 +116,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
       Map("aaaaa" -> 0, "kkkkk" -> ReadingFixture.getOffsetOf("k"), "uuuuu" -> ReadingFixture.getOffsetOf("u"))
 
     Files.readString(secondLogFile) shouldBe ReadingFixture.allKeysAndValuesOrderedString.mkString("")
-    result shouldBe Right(SSTDatabaseMetadata(TreeMap(), List(LogFile(secondLogFile, expectedLogIndex))))
+    result shouldBe Right(SSTDatabaseMetadata(databasePath, TreeMap(), List(LogFile(secondLogFile, expectedLogIndex))))
   }
 
   override def afterEach(): Unit = {

@@ -6,11 +6,22 @@ import cats.implicits.*
 import model.{DatabaseException, KeyNotFoundInIndices, LogFile}
 import shared.{createNewFile, getFileSize, getStringToWrite, readFromFile, scanFileForKey, writeToFile}
 
-import java.nio.file.Path
+import java.nio.file.{Path, Paths}
+import java.util.UUID
 import scala.collection.immutable.TreeMap
 
-def write(metadata: SSTDatabaseMetadata, key: String, value: String): TreeMap[String, String] =
-  metadata.memTable.updated(key, value)
+def write(
+  metadata: SSTDatabaseMetadata,
+  key: String,
+  value: String,
+  fileNameUpdater: SSTDatabaseMetadata => Path = newLogName
+): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
+  if (metadata.memTable.size > 100) {
+    compressAndWriteToSSTFile(metadata, fileNameUpdater)
+      .map(_.map(metadataAfterCompress => metadataAfterCompress.withUpdatedKeyValue(key, value)))
+  } else {
+    IO.pure(Right(metadata.withUpdatedKeyValue(key, value)))
+  }
 
 def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseException, String]] =
   metadata.memTable.get(key) match {
@@ -22,14 +33,12 @@ def compressAndWriteToSSTFile(
   metadata: SSTDatabaseMetadata,
   newFileNamer: SSTDatabaseMetadata => Path
 ): IO[Either[DatabaseException, SSTDatabaseMetadata]] = {
-  var indexForNewLogFile = Map()
-  var count              = 0
   (for {
     newFilePath                   <- EitherT.right[DatabaseException](createNewFile(newFileNamer(metadata)))
     memtableListWithStringToWrite <- EitherT.fromEither[IO](getKeyValueAndStringToWrite(metadata))
     index                         <- EitherT.right(writeMemtableToFile(memtableListWithStringToWrite, newFilePath))
     newLogFile = LogFile(newFilePath, index)
-  } yield SSTDatabaseMetadata(TreeMap(), newLogFile +: metadata.logFiles)).value
+  } yield SSTDatabaseMetadata(metadata.path, TreeMap(), newLogFile +: metadata.logFiles)).value
 }
 
 private def getKeyValueAndStringToWrite(metadata: SSTDatabaseMetadata): Either[DatabaseException, List[(String, String, String)]] =
@@ -81,3 +90,6 @@ private def findOffsetToScan(index: Map[String, Long], keyToSearchFor: String): 
   maybeNearestKeyAndNext match
     case Some((key, nextKey)) => (index(key), Some(index(nextKey)))
     case None                 => (index(sortedKeys.last), None)
+
+def newLogName(dbMetadata: SSTDatabaseMetadata) =
+  Paths.get(dbMetadata.path.toString + "/" + UUID.randomUUID().toString + ".txt")
