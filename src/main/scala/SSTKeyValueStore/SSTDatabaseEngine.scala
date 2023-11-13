@@ -16,12 +16,11 @@ def write(
   value: String,
   fileNameUpdater: SSTDatabaseMetadata => Path = newLogName
 ): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
-  if (metadata.memTable.size > 100 && !metadata.memTable.contains(key)) {
+  if (metadata.memTable.size > 100 && !metadata.memTable.contains(key))
     compressAndWriteToSSTFile(metadata, fileNameUpdater)
       .map(_.map(metadataAfterCompress => metadataAfterCompress.withUpdatedKeyValue(key, value)))
-  } else {
+  else
     IO.pure(Right(metadata.withUpdatedKeyValue(key, value)))
-  }
 
 def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseException, String]] =
   metadata.memTable.get(key) match {
@@ -32,14 +31,13 @@ def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseExceptio
 def compressAndWriteToSSTFile(
   metadata: SSTDatabaseMetadata,
   newFileNamer: SSTDatabaseMetadata => Path
-): IO[Either[DatabaseException, SSTDatabaseMetadata]] = {
+): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
   (for {
     newFilePath                   <- EitherT.right[DatabaseException](createNewFile(newFileNamer(metadata)))
     memtableListWithStringToWrite <- EitherT.fromEither[IO](getKeyValueAndStringToWrite(metadata))
     index                         <- EitherT.right(writeMemtableToFile(memtableListWithStringToWrite, newFilePath))
     newLogFile = LogFile(newFilePath, index)
   } yield SSTDatabaseMetadata(metadata.path, TreeMap(), newLogFile +: metadata.logFiles)).value
-}
 
 private def getKeyValueAndStringToWrite(metadata: SSTDatabaseMetadata): Either[DatabaseException, List[(String, String, String)]] =
   metadata.memTable.toList.traverse((key, value) => getStringToWrite(key, value).map(s => (key, value, s)))
