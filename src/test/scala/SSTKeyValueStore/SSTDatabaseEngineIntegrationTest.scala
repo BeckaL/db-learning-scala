@@ -1,7 +1,7 @@
 package SSTKeyValueStore
 
 import cats.effect.unsafe.implicits.global
-import model.{KeyNotFoundInIndices, LogFile}
+import model.{KeyNotFoundInIndices, LogFile, UnparseableBinaryString}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -42,31 +42,45 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
   }
 
   it should "read from a logfile when the entry is not directly in the index" in {
-    Files.writeString(existingLogFile, MyFixture.allKeysAndValues.mkString(""))
+    Files.writeString(existingLogFile, ReadingFixture.allKeysAndValues.mkString(""))
 
-    val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> MyFixture.getOffsetOf("h"), "t" -> MyFixture.getOffsetOf("t"))
+    val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> ReadingFixture.getOffsetOf("h"), "t" -> ReadingFixture.getOffsetOf("t"))
 
     val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
     val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
 
-    val keyToSearchFor = "r" * MyFixture.keySize
-    val expectedValue  = "r" * MyFixture.valueSize
+    val keyToSearchFor = "r" * ReadingFixture.keySize
+    val expectedValue  = "r" * ReadingFixture.valueSize
 
     read(sstDatabaseMetadata, keyToSearchFor).unsafeRunSync() shouldBe Right(expectedValue)
   }
 
   it should "read from a logfile when the entry is not directly in the memtable and is after the last key in the logfile index" in {
-    Files.writeString(existingLogFile, MyFixture.allKeysAndValues.mkString(""))
+    Files.writeString(existingLogFile, ReadingFixture.allKeysAndValues.mkString(""))
 
-    val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> MyFixture.getOffsetOf("h"), "t" -> MyFixture.getOffsetOf("t"))
+    val index: Map[String, Long] = Map("a" * 5 -> 0, "h" * 5 -> ReadingFixture.getOffsetOf("h"), "t" -> ReadingFixture.getOffsetOf("t"))
 
     val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
     val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
 
-    val keyToSearchFor = "v" * MyFixture.keySize
-    val expectedValue  = "v" * MyFixture.valueSize
+    val keyToSearchFor = "v" * ReadingFixture.keySize
+    val expectedValue  = "v" * ReadingFixture.valueSize
 
     read(sstDatabaseMetadata, keyToSearchFor).unsafeRunSync() shouldBe Right(expectedValue)
+  }
+
+  it should "bubble up a lower level error" in {
+    val firstKeyValue = getStringToWrite("aaa", "aaaaa").getRight
+    val malformedKeyValue = "00000010" + "a" + "00000001" + "a"
+    val myKeyValue = getStringToWrite(myKey, myValue).getRight
+
+    val index: Map[String, Long] = Map("a" -> 0)
+
+    Files.writeString(existingLogFile, firstKeyValue + malformedKeyValue + myKeyValue)
+    val inMemoryIndex       = TreeMap("someKey" -> "someValue", "anotherKey" -> "anotherValue")
+    val sstDatabaseMetadata = SSTDatabaseMetadata(inMemoryIndex, List(LogFile(existingLogFile, index)))
+
+    read(sstDatabaseMetadata, myKey).unsafeRunSync().getLeft shouldBe a[UnparseableBinaryString]
   }
 
   it should "return a left when the value is not found in the memtable and there are no logs" in {
@@ -77,7 +91,7 @@ class SSTDatabaseEngineIntegrationTest extends AnyFlatSpec with Matchers with Be
     Files.writeString(existingLogFile, "")
   }
 
-  object MyFixture {
+  object ReadingFixture {
     val keySize   = 5
     val valueSize = 10
     val allKeysAndValues = ('a' to 'z').toList

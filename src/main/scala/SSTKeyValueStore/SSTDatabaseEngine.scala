@@ -30,7 +30,7 @@ private def attemptToReadFromLogFiles(logFiles: List[LogFile], key: String): IO[
               scanFileForKey(startOffset, endOffset, firstLogFile.path, key).flatMap {
                 case Right(value)                  => IO.pure(Right(value))
                 case Left(KeyNotFoundInIndices(_)) => attemptToReadFromLogFiles(others, key)
-                case Left(otherException)          => ???
+                case Left(otherException)          => IO.pure(Left(otherException))
               }
             )
           else {
