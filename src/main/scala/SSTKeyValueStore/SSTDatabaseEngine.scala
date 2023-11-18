@@ -3,7 +3,7 @@ package SSTKeyValueStore
 import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
-import model.{DatabaseException, KeyNotFoundInIndices, LogFile}
+import model.{DatabaseException, KeyNotFoundInIndices, LogFile, SSTDatabaseMetadata}
 import shared.{createNewFile, getFileSize, getStringToWrite, getStringToWriteUnsafe, readFromFile, scanFileForKey, writeMemtableToFile, writeToFile}
 
 import java.nio.file.{Path, Paths}
@@ -28,7 +28,7 @@ def read(metadata: SSTDatabaseMetadata, key: String): IO[Either[DatabaseExceptio
     case None        => attemptToReadFromLogFiles(metadata.logFiles, key)
   }
 
-def compressMemtableAndWriteToSSTFile(
+protected def compressMemtableAndWriteToSSTFile(
   metadata: SSTDatabaseMetadata,
   newFileNamer: SSTDatabaseMetadata => Path
 ): IO[SSTDatabaseMetadata] =
@@ -69,5 +69,5 @@ private def findOffsetToScan(index: Map[String, Long], keyToSearchFor: String): 
     case Some((key, nextKey)) => (index(key), Some(index(nextKey)))
     case None                 => (index(sortedKeys.last), None)
 
-def newLogName(dbMetadata: SSTDatabaseMetadata) =
+private def newLogName(dbMetadata: SSTDatabaseMetadata) =
   Paths.get(dbMetadata.path.toString + "/" + UUID.randomUUID().toString + ".txt")

@@ -1,6 +1,6 @@
 import cats.data.EitherT
 import cats.effect.unsafe.implicits.global
-import model.{LogFile, ReadTooSmallValue}
+import model.{LogFile, ReadTooSmallValue, SimpleDatabaseMetadata}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

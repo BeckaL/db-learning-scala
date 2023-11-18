@@ -1,17 +1,17 @@
 package shared
 
-import SimpleKeyValueStore.SimpleDatabaseMetadata
 import cats.data.EitherT
 import cats.effect.IO
-import model.{BinaryStringLengthExceeded, DatabaseException, KeyNotFoundInIndices, KeyValuePair, LogFile, ReadTooSmallValue, UnparseableBinaryString}
+import model.{BinaryStringLengthExceeded, DatabaseException, KeyNotFoundInIndices, KeyValuePair, LogFile, ReadTooSmallValue, SSTDatabaseMetadata, SimpleDatabaseMetadata, UnparseableBinaryString}
 
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, Path, Paths, StandardOpenOption}
+import scala.collection.immutable.TreeMap
 import scala.util.{Failure, Success, Try}
 
-def createDatabaseEngine(
+def createSimpleDatabaseEngine(
   locationPrefix: String = "./src/main/resources",
   name: String,
   logFileSizeLimit: Long
@@ -24,6 +24,12 @@ def createDatabaseEngine(
     _               <- tryIO(Files.createDirectory(directoryPath))
     updatedMetadata <- createNewLogFile(initialMetadata)
   } yield updatedMetadata
+
+def createSSTDatabaseEngine(locationPrefix: String = "./src/main/resources", name: String): IO[SSTDatabaseMetadata] =
+  val directoryPathString = locationPrefix + "/" + name
+  tryIO(Paths.get(directoryPathString))
+    .flatMap(directoryPath => tryIO(Files.createDirectory(directoryPath)))
+    .map(directoryPath => SSTDatabaseMetadata(directoryPath, TreeMap(), List()))
 
 def createNewLogFile(databaseMetadata: SimpleDatabaseMetadata): IO[SimpleDatabaseMetadata] =
   val name = s"logFile${databaseMetadata.logFiles.length + 1}.txt"

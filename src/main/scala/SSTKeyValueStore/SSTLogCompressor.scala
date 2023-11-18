@@ -2,14 +2,25 @@ package SSTKeyValueStore
 
 import cats.data.EitherT
 import cats.effect.IO
-import model.{DatabaseException, KeyValuePair, LogFile}
+import model.{DatabaseException, KeyValuePair, LogFile, SSTDatabaseMetadata}
 
 import java.nio.channels.FileChannel
 import java.nio.file.Path
-import shared.{createNewFile, getFileSize, getStringToWriteUnsafe, readKeyValueFromFileChannel, writeMemtableToFile}
+import shared.{createNewFile, deleteFile, getFileSize, getStringToWriteUnsafe, readKeyValueFromFileChannel, writeMemtableToFile}
 
 import scala.collection.immutable.TreeMap
 import scala.util.Try
+
+def compress(sstMetadata: SSTDatabaseMetadata): IO[Either[DatabaseException, SSTDatabaseMetadata]] =
+  val olderFile      = sstMetadata.logFiles.last.path
+  val moreRecentFile = sstMetadata.logFiles.dropRight(1).last.path
+  val otherFiles     = sstMetadata.logFiles.dropRight(2)
+  val newPath        = newLogName(sstMetadata)
+  EitherT.apply(compress(moreRecentFile, olderFile, newPath)).map(newMap =>
+    sstMetadata.copy(logFiles = otherFiles :+ LogFile(newPath, newMap))
+  ).semiflatTap(_ =>
+    deleteFile(olderFile).flatMap(_ => deleteFile(moreRecentFile))
+  ).value
 
 def compress(newerFile: Path, olderFile: Path, newFilePath: Path): IO[Either[DatabaseException, Map[String, Long]]] = {
   val blah = for {

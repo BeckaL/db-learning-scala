@@ -1,7 +1,7 @@
 package SSTKeyValueStore
 
 import cats.effect.unsafe.implicits.global
-import model.{KeyNotFoundInIndices, LogFile, UnparseableBinaryString}
+import model.{KeyNotFoundInIndices, LogFile, SSTDatabaseMetadata, UnparseableBinaryString}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

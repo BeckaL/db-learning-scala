@@ -3,8 +3,8 @@ package SimpleKeyValueStore
 import cats.data.EitherT
 import cats.effect.IO
 import cats.implicits.*
-import model.{BinaryStringLengthExceeded, DatabaseException, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile, NotEnoughLogFilesToCompress}
-import shared.{getStringToWrite, readFromFile, writeToFile, getExistingFileSize, createNewLogFile, createNewFile, deleteFile}
+import model.{BinaryStringLengthExceeded, DatabaseException, FoundUnexpectedKeyAtOffset, KeyNotFoundInIndices, LogFile, NotEnoughLogFilesToCompress, SimpleDatabaseMetadata}
+import shared.{createNewFile, createNewLogFile, deleteFile, getExistingFileSize, getStringToWrite, readFromFile, writeToFile}
 
 import java.nio.file.{Path, Paths}
 import java.util.UUID
